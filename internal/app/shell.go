@@ -1,0 +1,182 @@
+package app
+
+import (
+	"fmt"
+
+	"github.com/AllenDang/cimgui-go/imgui"
+
+	"github.com/kaiser-chris/pdx-portrait-creator/internal/gui"
+)
+
+// Panel and window titles.
+//
+// Dear ImGui identifies a window by its title and the saved docking layout
+// refers to the same strings, so renaming one of these drops the user's stored
+// position for that panel.
+const (
+	panelPreview   = "Portrait"
+	panelCharacter = "Character"
+
+	windowSettings = "Settings"
+	windowAbout    = "About"
+)
+
+// dockNodeFlagsDockSpace is ImGuiDockNodeFlags_DockSpace from imgui_internal.h.
+// cimgui-go only generates the public flags, but building a default layout
+// needs this one: it marks the root node as able to host a dock space.
+const dockNodeFlagsDockSpace imgui.DockNodeFlags = 1 << 10
+
+// sidebarRatio is the share of the window the sidebar takes when the default
+// layout is built.
+const sidebarRatio = 0.3
+
+// dockSpace covers the remaining viewport with a dock space so every panel can
+// be rearranged, tabbed or torn off by the user.
+func (a *App) dockSpace() {
+	// PassthruCentralNode keeps the central node transparent when no panel is
+	// docked into it, so the window background stays visible.
+	id := imgui.DockSpaceOverViewportV(0, imgui.MainViewport(), imgui.DockNodeFlagsPassthruCentralNode, a.dockWindowClass)
+
+	if !a.state.layoutBuilt {
+		a.state.layoutBuilt = true
+		a.buildDefaultLayout(id)
+	}
+}
+
+// buildDefaultLayout puts the portrait in the middle of the window and the
+// character panel beside it. It only runs when there is no saved layout.
+func (a *App) buildDefaultLayout(dockSpaceID imgui.ID) {
+	imgui.InternalDockBuilderRemoveNode(dockSpaceID)
+	imgui.InternalDockBuilderAddNodeV(dockSpaceID, dockNodeFlagsDockSpace)
+	imgui.InternalDockBuilderSetNodeSize(dockSpaceID, imgui.MainViewport().WorkSize())
+
+	var sidebar, center imgui.ID
+	imgui.InternalDockBuilderSplitNode(dockSpaceID, imgui.DirRight, sidebarRatio, &sidebar, &center)
+
+	imgui.InternalDockBuilderDockWindow(panelPreview, center)
+	imgui.InternalDockBuilderDockWindow(panelCharacter, sidebar)
+
+	imgui.InternalDockBuilderFinish(dockSpaceID)
+}
+
+func (a *App) menuBar() {
+	if !imgui.BeginMainMenuBar() {
+		return
+	}
+	defer imgui.EndMainMenuBar()
+
+	if imgui.BeginMenu("File") {
+		if imgui.MenuItemBoolV("Exit", "Alt+F4", false, true) {
+			a.window.RequestClose()
+		}
+
+		imgui.EndMenu()
+	}
+
+	if imgui.BeginMenu("Settings") {
+		imgui.MenuItemBoolPtr("Open Settings", "Ctrl+,", &a.state.showSettings)
+
+		imgui.EndMenu()
+	}
+
+	if imgui.BeginMenu("Help") {
+		if imgui.MenuItemBool("About") {
+			a.state.showAbout = true
+		}
+
+		imgui.EndMenu()
+	}
+}
+
+// statusBar is the strip along the bottom of the window: the latest message
+// on the left, how the interface is doing on the right.
+func (a *App) statusBar() {
+	flags := imgui.WindowFlagsNoScrollbar | imgui.WindowFlagsNoSavedSettings | imgui.WindowFlagsMenuBar
+
+	if imgui.InternalBeginViewportSideBar("##StatusBar", imgui.MainViewport(), imgui.DirDown, imgui.FrameHeight(), flags) {
+		if imgui.BeginMenuBar() {
+			imgui.TextUnformatted(a.state.status)
+
+			right := fmt.Sprintf("%.0f FPS", imgui.CurrentIO().Framerate())
+
+			// Right align the diagnostics.
+			imgui.SameLine()
+			imgui.SetCursorPosX(imgui.ContentRegionAvail().X - imgui.CalcTextSize(right).X)
+			imgui.TextDisabled(right)
+
+			imgui.EndMenuBar()
+		}
+
+		imgui.End()
+	}
+}
+
+// handleShortcuts implements the keyboard shortcuts that are not attached to a
+// single panel.
+func (a *App) handleShortcuts() {
+	io := imgui.CurrentIO()
+
+	if io.KeyCtrl() && imgui.IsKeyPressedBool(imgui.KeyComma) {
+		a.state.showSettings = !a.state.showSettings
+	}
+
+	// Escape closes the window on top. While a text field is being edited Dear
+	// ImGui uses Escape to revert the edit, so leave it alone then. A popup
+	// that was open answers Escape itself. It has closed by now, so what
+	// counts is whether one was open when the frame began.
+	if imgui.IsKeyPressedBool(imgui.KeyEscape) && !io.WantTextInput() && !a.state.popupWasOpen {
+		a.closeFocusedWindow()
+	}
+}
+
+func (a *App) closeFocusedWindow() {
+	switch a.state.focusedWindow {
+	case windowSettings:
+		a.state.showSettings = false
+	case windowAbout:
+		a.state.showAbout = false
+	}
+
+	a.state.focusedWindow = ""
+}
+
+// previewPanel will show the portrait. For now it holds its place in the
+// layout.
+func (a *App) previewPanel() {
+	if imgui.Begin(panelPreview) {
+		imgui.TextDisabled("No character loaded")
+	}
+
+	imgui.End()
+}
+
+// characterPanel will hold the editing controls for the character.
+func (a *App) characterPanel() {
+	if imgui.Begin(panelCharacter) {
+		imgui.TextDisabled("Nothing to edit yet")
+	}
+
+	imgui.End()
+}
+
+func (a *App) aboutWindow() {
+	if !a.state.showAbout {
+		return
+	}
+
+	imgui.SetNextWindowSizeV(gui.ScaledVec2(360, 0), imgui.CondAppearing)
+
+	if imgui.BeginV(windowAbout, &a.state.showAbout, imgui.WindowFlagsNoDocking|imgui.WindowFlagsNoCollapse|imgui.WindowFlagsAlwaysAutoResize) {
+		a.trackFocus(windowAbout)
+
+		gui.PushStrongFont()
+		imgui.Text(applicationName)
+		gui.PopFont()
+
+		imgui.TextDisabled("Version " + applicationVersion)
+		imgui.Spacing()
+		imgui.TextWrapped("A character portrait editor for Paradox games.")
+	}
+
+	imgui.End()
+}
