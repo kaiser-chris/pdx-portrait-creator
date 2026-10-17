@@ -16,8 +16,9 @@ const (
 	// on Linux.
 	folderName = "pdx-portrait-creator"
 
-	settingsFileName = "settings.json"
-	layoutFileName   = "layout.ini"
+	settingsFileName  = "settings.json"
+	layoutFileName    = "layout.ini"
+	placementFileName = "window.json"
 )
 
 // Folder is a game or mod folder that the game data is read from.
@@ -83,6 +84,12 @@ func (s Store) SettingsPath() string {
 // application completely.
 func (s Store) LayoutPath() string {
 	return filepath.Join(s.dir, layoutFileName)
+}
+
+// PlacementPath returns the file where the window was when the application
+// last closed is kept in, next to the settings.
+func (s Store) PlacementPath() string {
+	return filepath.Join(s.dir, placementFileName)
 }
 
 // Load reads the settings file. A missing file is not an error: it yields the

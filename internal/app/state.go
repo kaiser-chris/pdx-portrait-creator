@@ -40,10 +40,23 @@ type state struct {
 
 	// status is the message shown in the status bar.
 	status string
+
+	// welcome is set while the welcome screen is wanted, which it is when
+	// the application starts, and picker is the picker of a starting point.
+	welcome bool
+	picker  picker
+
+	// category is the position of the category the character panel lists,
+	// and geneSearch what it searches every gene for instead.
+	category   int
+	geneSearch string
+
+	// showProblems shows the window of what went wrong reading the portrait.
+	showProblems bool
 }
 
 func newState(settings *config.Settings) state {
-	current := state{status: "Ready"}
+	current := state{status: "Ready", welcome: true}
 
 	current.loadFrom(settings)
 

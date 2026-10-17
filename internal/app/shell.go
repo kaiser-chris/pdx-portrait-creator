@@ -19,6 +19,7 @@ const (
 
 	windowSettings = "Settings"
 	windowAbout    = "About"
+	windowProblems = "Problems"
 )
 
 // dockNodeFlagsDockSpace is ImGuiDockNodeFlags_DockSpace from imgui_internal.h.
@@ -28,7 +29,7 @@ const dockNodeFlagsDockSpace imgui.DockNodeFlags = 1 << 10
 
 // sidebarRatio is the share of the window the sidebar takes when the default
 // layout is built.
-const sidebarRatio = 0.3
+const sidebarRatio = 0.36
 
 // dockSpace covers the remaining viewport with a dock space so every panel can
 // be rearranged, tabbed or torn off by the user.
@@ -66,21 +67,38 @@ func (a *App) menuBar() {
 	defer imgui.EndMainMenuBar()
 
 	if imgui.BeginMenu("File") {
-		if imgui.MenuItemBoolV("Exit", "Alt+F4", false, true) {
+		if imgui.MenuItemBoolV(gui.Iconed(gui.IconNewPortrait, "New Portrait..."), "Ctrl+N", false, a.canStartOver()) {
+			a.startOver()
+		}
+
+		// Why a new portrait cannot be started, where it cannot.
+		if !a.hasFolders() && imgui.IsItemHoveredV(imgui.HoveredFlagsAllowWhenDisabled) {
+			imgui.SetTooltip("Add the game's folder in Settings (Ctrl+,) first")
+		}
+
+		imgui.Separator()
+
+		if imgui.MenuItemBoolV(gui.Iconed(gui.IconExit, "Exit"), "Alt+F4", false, true) {
 			a.window.RequestClose()
 		}
 
 		imgui.EndMenu()
 	}
 
+	if imgui.BeginMenu("View") {
+		imgui.MenuItemBoolPtr(gui.Iconed(gui.IconWarning, "Problems"), "", &a.state.showProblems)
+
+		imgui.EndMenu()
+	}
+
 	if imgui.BeginMenu("Settings") {
-		imgui.MenuItemBoolPtr("Open Settings", "Ctrl+,", &a.state.showSettings)
+		imgui.MenuItemBoolPtr(gui.Iconed(gui.IconSettings, "Open Settings"), "Ctrl+,", &a.state.showSettings)
 
 		imgui.EndMenu()
 	}
 
 	if imgui.BeginMenu("Help") {
-		if imgui.MenuItemBool("About") {
+		if imgui.MenuItemBool(gui.Iconed(gui.IconInfo, "About")) {
 			a.state.showAbout = true
 		}
 
@@ -98,6 +116,18 @@ func (a *App) statusBar() {
 			imgui.TextUnformatted(a.state.status)
 
 			right := fmt.Sprintf("%.0f FPS", imgui.CurrentIO().Framerate())
+
+			// What went wrong reading the portrait is a click away.
+			if a.portrait != nil && len(a.portrait.diagnostics) > 0 {
+				problems := gui.Iconed(gui.IconWarning, fmt.Sprintf("%d problems", len(a.portrait.diagnostics)))
+
+				imgui.SameLine()
+				imgui.SetCursorPosX(imgui.ContentRegionAvail().X - imgui.CalcTextSize(right).X - imgui.CalcTextSize(problems).X - imgui.CurrentStyle().ItemSpacing().X*3)
+
+				if imgui.SmallButton(problems) {
+					a.state.showProblems = true
+				}
+			}
 
 			// Right align the diagnostics.
 			imgui.SameLine()
@@ -120,6 +150,10 @@ func (a *App) handleShortcuts() {
 		a.state.showSettings = !a.state.showSettings
 	}
 
+	if io.KeyCtrl() && imgui.IsKeyPressedBool(imgui.KeyN) && a.canStartOver() {
+		a.startOver()
+	}
+
 	// Escape closes the window on top. While a text field is being edited Dear
 	// ImGui uses Escape to revert the edit, so leave it alone then. A popup
 	// that was open answers Escape itself. It has closed by now, so what
@@ -135,6 +169,8 @@ func (a *App) closeFocusedWindow() {
 		a.state.showSettings = false
 	case windowAbout:
 		a.state.showAbout = false
+	case windowProblems:
+		a.state.showProblems = false
 	}
 
 	a.state.focusedWindow = ""
@@ -157,6 +193,41 @@ func (a *App) aboutWindow() {
 		imgui.TextDisabled("Version " + applicationVersion)
 		imgui.Spacing()
 		imgui.TextWrapped("A character portrait editor for Paradox games.")
+	}
+
+	imgui.End()
+}
+
+// canStartOver reports whether the welcome screen can be opened again: once a
+// portrait is loaded, and while neither it nor the picker is open.
+func (a *App) canStartOver() bool {
+	return a.portrait != nil && a.portrait.loaded() && !a.state.welcome && !a.state.picker.open
+}
+
+// startOver opens the welcome screen again, to start the portrait from
+// something else.
+func (a *App) startOver() {
+	a.state.welcome = true
+}
+
+// problemsWindow lists what went wrong reading the portrait.
+func (a *App) problemsWindow() {
+	if !a.state.showProblems {
+		return
+	}
+
+	imgui.SetNextWindowSizeV(gui.ScaledVec2(640, 360), imgui.CondFirstUseEver)
+
+	if imgui.BeginV(windowProblems, &a.state.showProblems, imgui.WindowFlagsNoDocking) {
+		a.trackFocus(windowProblems)
+
+		if a.portrait == nil || len(a.portrait.diagnostics) == 0 {
+			imgui.TextDisabled("Nothing went wrong")
+		} else {
+			for _, diagnostic := range a.portrait.diagnostics {
+				dimmedWrapped(diagnostic.String())
+			}
+		}
 	}
 
 	imgui.End()

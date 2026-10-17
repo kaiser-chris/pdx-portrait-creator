@@ -66,7 +66,7 @@ func (a *App) settingsWindow() {
 
 		a.folderTable()
 
-		if imgui.Button("Add Folder") {
+		if imgui.Button(gui.Iconed(gui.IconAdd, "Add Folder")) {
 			a.state.folders = append(a.state.folders, folderEntry{})
 		}
 
@@ -81,7 +81,7 @@ func (a *App) settingsWindow() {
 		unsaved := a.settingsChanged()
 
 		imgui.BeginDisabledV(!unsaved)
-		if imgui.Button("Revert") {
+		if imgui.Button(gui.Iconed(gui.IconReset, "Revert")) {
 			a.state.loadFrom(a.settings)
 			a.setStatus("Settings reverted")
 		}
@@ -145,9 +145,11 @@ func (a *App) folderTable() {
 		}
 
 		imgui.TableSetColumnIndex(2)
-		if imgui.Button("X") {
+		if imgui.Button(gui.IconDelete) {
 			remove = index
 		}
+
+		imgui.SetItemTooltip("Remove the folder")
 
 		imgui.PopID()
 	}

@@ -76,6 +76,9 @@ type Window struct {
 	// scaleSettled is set once the first frame has picked its scale. Every
 	// later change is one made while the application runs.
 	scaleSettled bool
+
+	// placement is where the window is, as of the last frame.
+	placement Placement
 }
 
 // NewWindow creates the window and the Dear ImGui context. It must be called
@@ -190,6 +193,8 @@ func (w *Window) Run(frame Frame) {
 // close. Having it separate is what lets a test advance the application one
 // frame at a time and look at the result in between.
 func (w *Window) Step(frame Frame) {
+	w.trackPlacement()
+
 	rl.BeginDrawing()
 	defer rl.EndDrawing()
 

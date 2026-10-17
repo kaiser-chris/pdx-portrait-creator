@@ -9,6 +9,7 @@ package app
 
 import (
 	"fmt"
+	"image"
 	"os"
 
 	"github.com/AllenDang/cimgui-go/imgui"
@@ -40,6 +41,10 @@ type App struct {
 	// portrait is what the portrait panel shows. It is nil when the 3D view
 	// could not be started.
 	portrait *portrait
+
+	// swatchTextures are the palettes uploaded for the interface to draw, by
+	// the pixels they were uploaded from; see swatchTexture.
+	swatchTextures map[*image.RGBA]imgui.TextureRef
 
 	// dockWindowClass is handed to the dock space every frame. cimgui-go
 	// dereferences that argument even when it is nil, so one default instance
@@ -107,9 +112,15 @@ func New(options Options) (*App, error) {
 		Hidden:     options.Hidden,
 	})
 
-	// The scale is asked for here as well as every frame, so that the first
-	// frame is already drawn at it rather than the one after.
-	application.window.SizeForScale(defaultWindowWidth, defaultWindowHeight, application.interfaceScale())
+	// The window opens maximized the first time, and after that the way it
+	// was closed. The scale is asked for here as well as every frame, so that
+	// the first frame is already drawn at it rather than the one after.
+	placement := loadPlacement(store.PlacementPath())
+	if placement.Width == 0 || placement.Height == 0 {
+		application.window.SizeForScale(defaultWindowWidth, defaultWindowHeight, application.interfaceScale())
+	}
+
+	application.window.Place(placement, options.Hidden)
 	application.window.SetScale(application.interfaceScale())
 	application.dialogs = systemDialogs{parent: dialogParent()}
 
@@ -125,6 +136,8 @@ func New(options Options) (*App, error) {
 	}
 
 	application.window.OnShutdown(func() {
+		savePlacement(store.PlacementPath(), application.window.Placement())
+
 		if application.portrait != nil {
 			application.portrait.unload()
 		}
@@ -193,6 +206,9 @@ func (a *App) frame() {
 
 	a.settingsWindow()
 	a.aboutWindow()
+	a.problemsWindow()
+	a.welcomeWindow()
+	a.pickerWindow()
 
 	a.handleShortcuts()
 }

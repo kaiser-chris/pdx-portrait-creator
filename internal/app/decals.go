@@ -17,15 +17,16 @@ import (
 // age of the portrait say, so they are worked out again whenever the genes
 // change, and handed to the renderer to lay over the head and the body.
 
-// readDecalTextures reads every texture the decals of a man's morph genes
-// name, by their paths below the folders' root, once each however many
-// decals name it. A texture that cannot be read is reported, and the decals
-// that name it are laid without it. So is a blend mode the renderer does not
-// know, and those decals are laid as an overlay, the games' first mode.
+// readDecalTextures reads every texture the decals of the morph genes name,
+// for every sex alike, by their paths below the folders' root, once
+// each however many decals name it. A texture that cannot be read is
+// reported, and the decals that name it are laid without it. So is a blend
+// mode the renderer does not know, and those decals are laid as an overlay,
+// the games' first mode.
 //
 // They are read with the portrait, off the thread that draws, so that
-// changing a gene never waits for a file; a man's genes name some eighty of
-// them.
+// changing a gene or the sex never waits for a file; a man's genes alone
+// name some eighty of them.
 func readDecalTextures(set *folders.Set, all *genes.Genes) (map[string]*texture.Image, report.Diagnostics) {
 	textures := map[string]*texture.Image{}
 
@@ -44,7 +45,12 @@ func readDecalTextures(set *folders.Set, all *genes.Genes) (map[string]*texture.
 
 	for _, gene := range all.MorphGenes.All() {
 		for index := range gene.Templates {
-			for _, decal := range gene.Templates[index].For(portraitSex).Decals {
+			var decals []genes.Decal
+			for _, sex := range genes.Sexes {
+				decals = append(decals, gene.Templates[index].For(sex).Decals...)
+			}
+
+			for _, decal := range decals {
 				for _, mode := range []string{decal.BlendModes.Diffuse, decal.BlendModes.Normal, decal.BlendModes.Properties} {
 					if _, ok := render.ParseBlendMode(mode); mode != "" && !ok {
 						note("gene "+gene.Key, fmt.Sprintf("a decal is blended by %s, which is not overlay, replace, hard_light or multiply; laid as an overlay", mode))
@@ -87,19 +93,19 @@ func blendMode(name string) render.BlendMode {
 // order of the genes: how opaque each is is its alpha curve at the gene's
 // strength, changed by its age. Those the age or the strength leave
 // transparent are left out.
-func (m *morphs) decals(textures map[string]*texture.Image) []render.Decal {
+func (c *character) decals(textures map[string]*texture.Image) []render.Decal {
 	var laid []render.Decal
 
-	at := float64(m.age) / maxAge
+	at := c.at()
 
-	for _, morph := range m.genes {
+	for _, morph := range c.morphs {
 		template := &morph.gene.Templates[morph.template]
 		strength := float64(morph.value) / maxGeneValue
 
-		for index := range template.For(portraitSex).Decals {
-			decal := &template.For(portraitSex).Decals[index]
+		for index := range template.For(c.sex).Decals {
+			decal := &template.For(c.sex).Decals[index]
 
-			weight := m.all.DecalAlpha(decal, strength, at)
+			weight := c.all.DecalAlpha(decal, strength, at)
 			if weight <= 0 {
 				continue
 			}
@@ -122,9 +128,10 @@ func (m *morphs) decals(textures map[string]*texture.Image) []render.Decal {
 	return laid
 }
 
-// laysDecals reports whether a template of a gene lays any decal over a man.
-func laysDecals(gene *genes.MorphGene) bool {
+// laysDecals reports whether a template of a gene lays any decal over a
+// character of a sex.
+func laysDecals(gene *genes.MorphGene, sex genes.Sex) bool {
 	return slices.ContainsFunc(gene.Templates, func(template genes.MorphTemplate) bool {
-		return len(template.For(portraitSex).Decals) > 0
+		return len(template.For(sex).Decals) > 0
 	})
 }

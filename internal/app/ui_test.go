@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kaiser-chris/pdx-asset-go/render"
+	"github.com/kaiser-chris/pdx-parser-go/genes"
 )
 
 // startApp runs the real application in a hidden window, with the settings
@@ -199,25 +200,49 @@ func TestPortraitOfTheInstalledGame(t *testing.T) {
 		}
 	}
 
-	// The genes are listed, set as the ethnicity previews neutral, as the
-	// game's portrait editor does, and most of them morph what is drawn.
+	// The portrait starts from scratch: the template ethnicity, every gene
+	// at its first template at 127, as the game's portrait editor shows it,
+	// and the welcome screen asks what to start from.
 	portrait := application.portrait
-	if portrait.ethnicity == nil || portrait.ethnicity.Key != portraitEthnicity {
-		t.Errorf("ethnicity = %+v, want %s", portrait.ethnicity, portraitEthnicity)
+	if portrait.basis.kind != basisScratch || portrait.basis.ethnicity == nil || portrait.basis.ethnicity.Key != templateEthnicity {
+		t.Errorf("basis = %+v, want %s from scratch", portrait.basis, templateEthnicity)
 	}
 
-	for _, morph := range portrait.morphs.genes {
+	if !application.state.welcome {
+		t.Error("the welcome screen is not shown at the start")
+	}
+
+	application.state.welcome = false
+
+	character := portrait.character
+
+	for _, morph := range character.morphs {
 		if morph.value != 127 || morph.template != 0 && morph.gene.Templates[morph.template].Index != 0 {
 			t.Errorf("%s is at %s %d, want its first template at 127", morph.gene.Key, morph.gene.Templates[morph.template].Name, morph.value)
 		}
+
+		// Every gene of the game has a category and a name.
+		if categories[morph.category].id == categoryOther {
+			t.Errorf("%s is not catalogued", morph.gene.Key)
+		}
+	}
+
+	for _, accessory := range character.accessories {
+		if !accessory.hidden && categories[accessory.category].id == categoryOther {
+			t.Errorf("%s is not catalogued", accessory.gene.Key)
+		}
+	}
+
+	if character.lists(otherCategory()) {
+		t.Error("Other is listed, with every gene of the game catalogued")
 	}
 
 	morphing := 0
 
 	var nose *morphGene
 
-	for index := range portrait.morphs.genes {
-		morph := &portrait.morphs.genes[index]
+	for index := range character.morphs {
+		morph := &character.morphs[index]
 		if morph.drawn {
 			morphing++
 		}
@@ -233,26 +258,34 @@ func TestPortraitOfTheInstalledGame(t *testing.T) {
 		}
 	}
 
-	if len(portrait.morphs.genes) < 50 || morphing < len(portrait.morphs.genes)/3 || nose == nil || !nose.drawn {
-		t.Fatalf("%d morph genes, %d of them drawn, the nose %+v", len(portrait.morphs.genes), morphing, nose)
+	if len(character.morphs) < 50 || morphing < len(character.morphs)/3 || nose == nil || !nose.drawn {
+		t.Fatalf("%d morph genes, %d of them drawn, the nose %+v", len(character.morphs), morphing, nose)
 	}
 
-	// Changing a gene changes the picture.
+	// Changing a gene changes the picture, and is counted as a change in its
+	// category.
 	before := portrait.viewer.Image()
-
-	// To the other end from where the character has it.
-	if nose.value < maxGeneValue/2 {
-		nose.value = maxGeneValue
-	} else {
-		nose.value = 0
-	}
-
-	portrait.morphs.changed = true
+	nose.value = maxGeneValue
+	character.changed = true
 	application.Step()
 
 	if changed := differingPixels(before, portrait.viewer.Image()); changed == 0 {
 		t.Error("changing the size of the nose changed nothing drawn")
 	}
+
+	if keys, counts := character.changes(); !keys["gene_nose_size"] || counts[nose.category] != 1 || len(keys) != 1 {
+		t.Errorf("changes = %v, %v; want the nose alone", keys, counts)
+	}
+
+	character.resetGene("gene_nose_size")
+
+	if nose.value != neutralValue {
+		t.Errorf("the nose is at %d after resetting it, want %d", nose.value, neutralValue)
+	}
+
+	highlighted(t, application, nose)
+	stagedInEnvironments(t, application)
+	animated(t, application)
 
 	// Turning the camera turns the body.
 	portrait.viewer.Rotate(1, 0)
@@ -262,33 +295,250 @@ func TestPortraitOfTheInstalledGame(t *testing.T) {
 		t.Errorf("yaw = %v after turning by 1", portrait.viewer.Yaw)
 	}
 
-	// The panels draw with the genes in them, and a filter that matches none.
-	portrait.morphs.filter = "nose"
-	application.Step()
+	// The panel draws every category, a search, and a search that finds
+	// nothing.
+	for index := range categories {
+		application.state.category = index
+		application.Step()
+	}
 
-	portrait.morphs.filter = "nothing at all"
-	application.Step()
+	for _, search := range []string{"nose", "nothing at all"} {
+		application.state.geneSearch = search
+		application.Step()
+	}
+
+	application.state.geneSearch = ""
 
 	agedDecals(t, application)
+	startingPoints(t, application)
+}
+
+// highlighted checks that pointing at a gene highlights what it moves, once
+// it has been pointed at for long enough, and that the highlight goes when
+// nothing is pointed at.
+func highlighted(t *testing.T, application *App, nose *morphGene) {
+	t.Helper()
+
+	portrait := application.portrait
+
+	// The portrait stands still, so that only the highlight changes what is
+	// drawn.
+	portrait.animation.none = true
+	portrait.animation.restart(portrait.sex)
+
+	defer func() {
+		portrait.animation.none = false
+		portrait.animation.restart(portrait.sex)
+	}()
+
+	portrait.highlight.enabled = true
+	portrait.frameFace()
+	application.Step()
+
+	plain := portrait.viewer.Image()
+
+	for range highlightDelay + 2 {
+		portrait.highlight.point(nose.gene.Key, []string{nose.gene.Key})
+		application.Step()
+	}
+
+	measured, ok := portrait.highlight.measured[portrait.highlight.shown]
+	if !ok || measured.furthest <= 0 {
+		t.Fatalf("highlighting %s measured %+v", nose.gene.Key, measured)
+	}
+
+	if changed := differingPixels(plain, portrait.viewer.Image()); changed < 100 {
+		t.Errorf("highlighting the nose changes %d pixels, want it to show", changed)
+	}
+
+	if dump := os.Getenv("PDX_DUMP_DIR"); dump != "" {
+		if err := writePNG(filepath.Join(dump, "portrait_highlight_nose.png"), portrait.viewer.Image()); err != nil {
+			t.Error(err)
+		}
+	}
+
+	// Held, as while its slider is dragged, the gene is pointed at but the
+	// portrait is shown plain.
+	portrait.highlight.point(nose.gene.Key, []string{nose.gene.Key})
+	portrait.highlight.hold()
+	application.Step()
+
+	if changed := differingPixels(plain, portrait.viewer.Image()); changed != 0 {
+		t.Errorf("%d pixels differ while the highlight is held", changed)
+	}
+
+	// Nothing pointed at: the highlight goes.
+	application.Step()
+	application.Step()
+
+	if changed := differingPixels(plain, portrait.viewer.Image()); changed != 0 {
+		t.Errorf("%d pixels still differ once nothing is pointed at", changed)
+	}
+}
+
+// stagedInEnvironments checks that the portrait is lit by the game's standard environment
+// by default, with its lights and its cubemap, that the studio lights it
+// otherwise, and that a camera of the game moves the view.
+func stagedInEnvironments(t *testing.T, application *App) {
+	t.Helper()
+
+	portrait := application.portrait
+	staging := &portrait.staging
+
+	if staging.environment != defaultEnvironment || len(staging.cameraKeys()) == 0 {
+		t.Fatalf("environment %q, %d cameras; want %s and the game's cameras", staging.environment, len(staging.cameraKeys()), defaultEnvironment)
+	}
+
+	// The cubemap is read off the thread that draws.
+	deadline := time.Now().Add(30 * time.Second)
+
+	for application.Step(); len(staging.reading) > 0; application.Step() {
+		if time.Now().After(deadline) {
+			t.Fatal("the cubemap was not read within half a minute")
+		}
+	}
+
+	lighting := staging.lighting(portrait)
+	if lighting == nil || len(lighting.Lights) == 0 || lighting.Environment == nil || lighting.Shadow == nil || !lighting.ACES {
+		t.Fatalf("lighting = %+v, want the environment's lights, cubemap, shadow and the ACES tonemap", lighting)
+	}
+
+	// The ambient occlusion is drawn where the settings ask for it.
+	ssao, ok := staging.settings.SSAO.Get()
+	if asked := ok && ssao.Enabled; asked != (lighting.Occlusion != nil) {
+		t.Errorf("occlusion %+v, want one %v as the settings ask", lighting.Occlusion, asked)
+	}
+
+	portrait.animation.paused = true
+	application.Step()
+
+	lit := portrait.viewer.Image()
+
+	staging.environment = ""
+	application.Step()
+
+	if staging.lighting(portrait) != nil {
+		t.Error("no environment picked lights with one")
+	}
+
+	if changed := differingPixels(lit, portrait.viewer.Image()); changed < 1000 {
+		t.Errorf("the studio lights the portrait as the environment does, %d pixels apart", changed)
+	}
+
+	// A camera of the game stands where it says, and framing lets go of it.
+	staging.camera = "camera_body"
+	portrait.frame()
+
+	if fov := portrait.viewer.FieldOfView; fov != 20 {
+		t.Errorf("camera_body sees %v degrees, want its 20", fov)
+	}
+
+	staging.environment, staging.camera = defaultEnvironment, ""
+	portrait.animation.paused = false
+	portrait.frame()
+	application.Step()
+}
+
+// startingPoints checks that the portrait can start from an ethnicity, which
+// gives it the ethnicity's colours, and from a character, whose hair and
+// beard are drawn with the head, and that changing the sex loads a woman.
+func startingPoints(t *testing.T, application *App) {
+	t.Helper()
+
+	portrait := application.portrait
+
+	application.openPicker(pickEthnicities)
+	application.pick("caucasian_blond")
+	application.Step()
+
+	if portrait.basis.kind != basisEthnicity || portrait.basis.key != "caucasian_blond" {
+		t.Errorf("basis = %+v, want caucasian_blond", portrait.basis)
+	}
+
+	if hair, ok := portrait.character.colour("hair"); !ok || hair.value == [2]int32{} {
+		t.Errorf("the hair colour of caucasian_blond is %+v, want the ethnicity's", hair)
+	}
+
+	if portrait.viewer.Look.HairColor == render.DefaultLook.HairColor {
+		t.Error("the hair is drawn in the stand in colour")
+	}
+
+	application.state.picker.kind = pickCharacters
+	application.pick("dna_abraham_lincoln")
+	waitForHead(t, application)
+
+	if portrait.basis.kind != basisCharacter || len(portrait.parts) <= 3 {
+		t.Errorf("basis %+v drawn with %v, want Lincoln's hair and beard as well as his eyes, eyelashes and teeth", portrait.basis, portrait.parts)
+	}
+
+	if dump := os.Getenv("PDX_DUMP_DIR"); dump != "" {
+		portrait.frameFace()
+		application.Step()
+
+		if err := writePNG(filepath.Join(dump, "portrait_lincoln.png"), portrait.viewer.Image()); err != nil {
+			t.Error(err)
+		}
+	}
+
+	application.closePicker(false)
+
+	// A woman is another body and head, loaded anew with the same DNA.
+	application.start(portrait.basis, portrait.character.dna(), genes.Female)
+	waitForPortrait(t, application)
+
+	if portrait.problem != nil || !portrait.loaded() || portrait.sex != genes.Female || portrait.character.sex != genes.Female {
+		t.Fatalf("problem %v, sex %v, want a woman", portrait.problem, portrait.sex)
+	}
+
+	if portrait.basis.key != "dna_abraham_lincoln" {
+		t.Errorf("basis = %+v after changing the sex, want it kept", portrait.basis)
+	}
+
+	// A girl is drawn with the woman's body and head, so becoming one loads
+	// nothing; only the settings of the genes change.
+	application.start(portrait.basis, portrait.character.dna(), genes.Girl)
+
+	if portrait.loading || portrait.sex != genes.Girl || portrait.character.sex != genes.Girl {
+		t.Errorf("loading %v, sex %v; want a girl without loading anew", portrait.loading, portrait.sex)
+	}
+
+	application.Step()
+}
+
+// waitForHead steps the application until the head has been read again with
+// the parts its genes pick.
+func waitForHead(t *testing.T, application *App) {
+	t.Helper()
+
+	deadline := time.Now().Add(time.Minute)
+
+	for application.Step(); application.portrait.rebuilding; application.Step() {
+		if time.Now().After(deadline) {
+			t.Fatal("the head was not read again within a minute")
+		}
+	}
+
+	application.Step()
 }
 
 // agedDecals checks that the genes lay their decals over the face of an old
 // man, wrinkles and crow's feet among them, with every texture they name,
 // and that they are drawn. With PDX_DUMP_DIR set, the face is written out at
-// half and at the whole of a life, to compare with the game's portrait
+// the default age and at the whole of a life, to compare with the game's portrait
 // editor.
 func agedDecals(t *testing.T, application *App) {
 	t.Helper()
 
 	portrait := application.portrait
-	portrait.apply(portrait.genes.Preview(portrait.ethnicity, portrait.preview))
+	character := portrait.character
+	character.reset(character.basis)
 	portrait.frameFace()
 
 	dump := os.Getenv("PDX_DUMP_DIR")
 
 	for _, age := range []int32{defaultAge, maxAge} {
-		portrait.morphs.age = age
-		portrait.morphs.changed = true
+		character.age = age
+		character.changed = true
 		application.Step()
 
 		if dump == "" {
@@ -300,7 +550,7 @@ func agedDecals(t *testing.T, application *App) {
 		}
 	}
 
-	decals := portrait.morphs.decals(portrait.decalTextures)
+	decals := character.decals(portrait.decalTextures)
 
 	laid := map[string]bool{}
 
@@ -319,7 +569,7 @@ func agedDecals(t *testing.T, application *App) {
 	for _, gene := range []string{"gene_crowfeet", "gene_old_forehead"} {
 		found := false
 
-		for _, morph := range portrait.morphs.genes {
+		for _, morph := range character.morphs {
 			found = found || morph.gene.Key == gene && morph.drawn
 		}
 
@@ -349,7 +599,8 @@ func agedDecals(t *testing.T, application *App) {
 		t.Errorf("the decals of an old man change %d pixels of his face, want them to show", changed)
 	}
 
-	portrait.morphs.changed = true
+	character.age = defaultAge
+	character.changed = true
 	application.Step()
 }
 
@@ -384,4 +635,72 @@ func differingPixels(a, b *image.RGBA) int {
 	}
 
 	return count
+}
+
+// animated checks that the portrait plays idle by default, which moves it as
+// time goes on once its animations are read, and that playing none stands it
+// in the pose its meshes are stored in.
+func animated(t *testing.T, application *App) {
+	t.Helper()
+
+	portrait := application.portrait
+	playing := &portrait.animation
+
+	if playing.chosen != defaultAnimation || playing.none {
+		t.Fatalf("playing %q, none %v; want %s", playing.chosen, playing.none, defaultAnimation)
+	}
+
+	// The animation's samples are read off the thread that draws.
+	deadline := time.Now().Add(30 * time.Second)
+
+	for {
+		application.Step()
+
+		if _, _, _, ok := playing.body.Playing(); ok && len(playing.samples) > 0 && len(playing.reading) == 0 {
+			break
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatal("the idle animation was not read within half a minute")
+		}
+	}
+
+	before := portrait.viewer.Image()
+	time.Sleep(300 * time.Millisecond)
+	application.Step()
+
+	if changed := differingPixels(before, portrait.viewer.Image()); changed == 0 {
+		t.Error("the portrait stood still while idle played")
+	}
+
+	// Paused, it stands still.
+	playing.paused = true
+	application.Step()
+
+	paused := portrait.viewer.Image()
+	time.Sleep(100 * time.Millisecond)
+	application.Step()
+
+	if changed := differingPixels(paused, portrait.viewer.Image()); changed != 0 {
+		t.Errorf("%d pixels changed while the animation was paused", changed)
+	}
+
+	playing.paused = false
+
+	// Every set can be picked for every sex the portrait can be.
+	if choices := playing.choices(portrait.sex); len(choices) == 0 || choices[0] != (animationChoice{set: defaultAnimation}) {
+		t.Errorf("choices = %v, want %s first", choices, defaultAnimation)
+	}
+
+	playing.none = true
+	playing.restart(portrait.sex)
+	application.Step()
+
+	if _, _, _, ok := playing.body.Playing(); ok {
+		t.Error("the body plays something with no animation picked")
+	}
+
+	playing.none = false
+	playing.restart(portrait.sex)
+	application.Step()
 }

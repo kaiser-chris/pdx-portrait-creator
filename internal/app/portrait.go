@@ -3,10 +3,9 @@ package app
 import (
 	"errors"
 	"fmt"
-	"math"
+	"image"
 	"os"
-
-	"github.com/AllenDang/cimgui-go/imgui"
+	"slices"
 
 	"github.com/kaiser-chris/pdx-asset-go/entity"
 	"github.com/kaiser-chris/pdx-asset-go/model"
@@ -16,26 +15,32 @@ import (
 	"github.com/kaiser-chris/pdx-parser-go/database"
 	"github.com/kaiser-chris/pdx-parser-go/folders"
 	"github.com/kaiser-chris/pdx-parser-go/genes"
+	staged "github.com/kaiser-chris/pdx-parser-go/portrait"
 	"github.com/kaiser-chris/pdx-parser-go/report"
 
 	"github.com/kaiser-chris/pdx-portrait-creator/internal/config"
 )
 
-// The entities the portrait panel shows: the body and the head Victoria 3's
-// portrait settings give a man, and the joints the head is attached to the
-// body by, which gfx/portraits/portraitsettings.txt names. For now they are
-// fixed.
+// The joints the head is attached to the body by, which
+// gfx/portraits/portraitsettings.txt names, and the bone of the head the face
+// moves with, which the camera follows.
 const (
-	bodyEntity = "male_body_entity"
-	headEntity = "male_head_entity"
-
 	bodyJoint = "bn_sp_thoracic"
 	headJoint = "head_root"
-
-	// faceJoint is the bone of the head the face moves with, which the
-	// camera follows.
 	faceJoint = "bn_h_head"
 )
+
+// entitiesOf are the body and the head Victoria 3's portrait settings give a
+// sex: a boy is drawn with the body and the head of a man and a girl with a
+// woman's, which the genes' settings for children and the age presets make a
+// child of.
+func entitiesOf(sex genes.Sex) (body, head string) {
+	if sex == genes.Female || sex == genes.Girl {
+		return "female_body_entity", "female_head_entity"
+	}
+
+	return "male_body_entity", "male_head_entity"
+}
 
 // headLinks are all the joints the head is attached to the body by, which it
 // follows wherever the body's additive animations take them.
@@ -45,71 +50,96 @@ var headLinks = []render.JointLink{
 	{Parent: "bn_r_clavicle", Child: "bn_h_r_clavicle"},
 }
 
-// headParts are the accessory genes whose accessories are parts of the head
-// rather than something worn: the eyes, the eyelashes and the teeth. They are
-// drawn with the head, posed as it is.
-var headParts = []string{"eye_accessory", "eye_lashes_accessory", "teeth_accessory"}
+// seamTolerance is how near a vertex of the head has to lie to one of the
+// body to be taken for the same, in the units of the meshes, centimetres;
+// the rings where they meet lie at the same places to a hundredth of that.
+const seamTolerance = 0.01
 
-// previewNames name the ways an ethnicity's DNA is previewed, in the
-// order of genes.Preview, and previewHelp says what each does.
-var (
-	previewNames = []string{"Neutral", "Likeliest"}
-	previewHelp  = []string{
-		"Every gene at its first template and the middle of its strength, as the game's portrait editor shows an ethnicity",
-		"Every gene the ethnicity lists at its likeliest choice and the middle of its range",
-	}
-)
+// headPose is the entity the parts of the head are posed with, as the
+// portrait accessories name it: the eyes, the teeth, the hair and the beard.
+const headPose = "head"
 
-// skinPalette is the palette the colour of a portrait's skin is picked from,
-// and skinColorGene the colour gene that picks it.
-const (
-	skinPalette   = "gfx/portraits/skin_palette.dds"
-	skinColorGene = "skin_color"
-)
+// emptyAccessory is what the genes name for an accessory that draws nothing,
+// such as the hairstyle of no hair, which no portrait accessory defines.
+const emptyAccessory = "empty"
 
-// portraitEthnicity is the ethnicity of common/ethnicities whose DNA the
-// portrait starts from, the one every other ethnicity of Victoria 3 builds
-// on. For now it is fixed.
-const portraitEthnicity = "ethnicity_template"
+// palettePaths are the palettes the colours of a portrait are picked from, by
+// what each colours, as the colour genes name it.
+var palettePaths = map[string]string{
+	"skin": "gfx/portraits/skin_palette.dds",
+	"hair": "gfx/portraits/hair_palette.dds",
+	"eye":  "gfx/portraits/eye_palette.dds",
+}
 
-// How the mouse turns and moves the camera: radians per pixel dragged, and
-// how much closer one notch of the wheel brings it.
-const (
-	turnPerPixel = 0.01
-	zoomPerNotch = 1.15
-)
+// templateEthnicity is the ethnicity of common/ethnicities every other
+// ethnicity of Victoria 3 builds on, which a portrait started from scratch is
+// made from.
+const templateEthnicity = "ethnicity_template"
 
 // portrait is what the portrait panel shows: the models on the GPU, the
-// viewer that draws them, the genes that morph them, and the loading that
-// produces all of it.
+// viewer that draws them, the character whose DNA they are drawn from, the
+// game data a character is made from, and the loading that produces all of
+// it.
 type portrait struct {
 	renderer *render.Renderer
 	viewer   *render.Viewer
 
 	// body and head are the models drawn, and nil until a load has
-	// finished. framing is set when a load has finished and the camera has
-	// yet to frame the head, once it has been morphed and posed.
+	// finished. framing is set when the camera has yet to frame the head,
+	// once it has been morphed and posed.
 	body, head *render.Model
 	framing    bool
 
-	// genes are the genes of the folders, ethnicity the ethnicity the
-	// portrait started from, flattened, nil when the folders have no such
-	// ethnicity, preview how its DNA is made, and morphs the morph genes as
-	// the character panel sets them.
-	genes     *genes.Genes
-	ethnicity *genes.Ethnicity
-	preview   genes.Preview
+	// figure is set when the camera frames the whole figure rather than the
+	// face, which it keeps doing for every portrait drawn after.
+	figure bool
 
-	// skinPalette is the palette the colour of the skin is picked from, nil
-	// when the folders have none, which draws it in a stand in tone.
-	skinPalette *texture.Image
-	morphs      morphs
+	// sex is whose body and head are loaded.
+	sex genes.Sex
+
+	// loader reads the parts of the head again when the hair or the beard
+	// changes, and bodySource is the body as read, which the head is seated
+	// on. The loader is only used by one goroutine at a time: the load that
+	// made it, then one rebuilding of the head after another.
+	loader     *entity.Loader
+	bodySource *model.Model
+
+	// The game data a character is made from: the genes, the ethnicities as
+	// written, the DNA of the game's characters, the portrait accessories
+	// the accessory genes pick, and the palettes the colours are picked
+	// from, by what each colours, as read and as pixels for the interface.
+	genes       *genes.Genes
+	ethnicities database.Table[genes.Ethnicity]
+	characters  database.Table[genes.DNA]
+	accessories database.Table[genes.Accessory]
+	palettes    map[string]*texture.Image
+	swatches    map[string]*image.RGBA
+
+	// character is the DNA the portrait is drawn from, and basis what it
+	// started from.
+	character *character
+	basis     basis
+
+	// parts are the entities the head is drawn with now, and rebuilding is
+	// set while the head is read again with other parts.
+	parts      []string
+	rebuilding bool
+	heads      chan headResult
 
 	// decalTextures are the textures the decals of the genes name, by their
 	// paths, and decalProblem why the decals could last not be laid, so that
 	// it is reported once.
 	decalTextures map[string]*texture.Image
 	decalProblem  string
+
+	// highlight is what the portrait highlights; see highlight.go.
+	highlight highlighting
+
+	// animation is what the portrait plays; see animation.go.
+	animation animating
+
+	// staging is the environment and the camera; see staging.go.
+	staging staging
 
 	// loading is set while a load runs, and generation counts the loads
 	// started, so that a load the folders have changed under since is
@@ -128,14 +158,73 @@ type portrait struct {
 	width, height int32
 }
 
+// basis is what a character started from: nothing but the template
+// ethnicity, an ethnicity, or a character of the game.
+type basis struct {
+	kind basisKind
+
+	// key is the ethnicity's or the character's, and ethnicity the
+	// ethnicity, flattened, whose colours the colour pickers outline: the
+	// template ethnicity's for a portrait started from scratch.
+	key       string
+	ethnicity *genes.Ethnicity
+}
+
+type basisKind int
+
+const (
+	basisScratch basisKind = iota
+	basisEthnicity
+	basisCharacter
+)
+
+// describe is what the portrait shows of a basis: what it is and the key the
+// game defines it under. The game files give a character or an ethnicity no
+// name of its own, so it is not made one up.
+func (b basis) describe() string {
+	switch b.kind {
+	case basisEthnicity:
+		return "Ethnicity " + b.key
+	case basisCharacter:
+		return b.key
+	default:
+		return "Scratch"
+	}
+}
+
 // portraitResult is what a load comes back with.
 type portraitResult struct {
+	generation int
+	sex        genes.Sex
+	dna        *genes.DNA
+	basis      basis
+
+	loader       *entity.Loader
+	assets       *asset.Assets
+	animations   database.Table[genes.AnimationSet]
+	set          *folders.Set
+	environments database.Table[staged.Environment]
+	cameras      database.Table[staged.PortraitCamera]
+	settings     staged.Settings
+	body, head   *model.Model
+	parts        []string
+	genes        *genes.Genes
+	ethnicities  database.Table[genes.Ethnicity]
+	characters   database.Table[genes.DNA]
+	accessories  database.Table[genes.Accessory]
+	palettes     map[string]*texture.Image
+	swatches     map[string]*image.RGBA
+	decals       map[string]*texture.Image
+	diagnostics  report.Diagnostics
+	err          error
+}
+
+// headResult is what reading the head again with other parts comes back
+// with.
+type headResult struct {
 	generation  int
-	body, head  *model.Model
-	genes       *genes.Genes
-	ethnicity   *genes.Ethnicity
-	skinPalette *texture.Image
-	decals      map[string]*texture.Image
+	head        *model.Model
+	parts       []string
 	diagnostics report.Diagnostics
 	err         error
 }
@@ -150,14 +239,15 @@ func newPortrait() (*portrait, error) {
 
 	viewer := renderer.NewViewer(1, 1)
 
-	return &portrait{renderer: renderer, viewer: viewer, results: make(chan portraitResult, 1)}, nil
+	return &portrait{renderer: renderer, viewer: viewer, results: make(chan portraitResult, 1), heads: make(chan headResult, 1)}, nil
 }
 
-// load starts reading the portrait from the configured folders on a
+// load starts reading the portrait of a sex from the configured folders on a
 // goroutine of its own: reading the asset files and the genes and decoding
 // the textures takes long enough that the window would stop answering
-// meanwhile.
-func (p *portrait) load(configured []config.Folder) {
+// meanwhile. The portrait is drawn from a DNA once it is loaded, and from the
+// template ethnicity for no DNA.
+func (p *portrait) load(configured []config.Folder, sex genes.Sex, dna *genes.DNA, from basis) {
 	p.generation++
 	p.loading = true
 	p.problem = nil
@@ -170,30 +260,36 @@ func (p *portrait) load(configured []config.Folder) {
 	}
 
 	go func() {
-		result := readPortrait(folders.Open(sources))
+		result := readPortrait(folders.Open(sources), sex, dna, from)
 		result.generation = generation
 
-		// A result nobody waits for any more is dropped rather than left
-		// blocking the goroutine.
-		select {
-		case p.results <- result:
-		default:
-			select {
-			case <-p.results:
-			default:
-			}
-			p.results <- result
-		}
+		send(p.results, result)
 	}()
 }
 
-// readPortrait reads the body and the head, seats the head on the body, reads
-// the genes and the ethnicity, and adds the eyes, the eyelashes and the teeth
-// its neutral DNA picks to the head. It is plain Go, which runs off the thread
-// that draws.
-func readPortrait(set *folders.Set) portraitResult {
-	result := portraitResult{}
-	loader := entity.NewLoader(set, asset.Load(set))
+// send hands a result over without blocking: one nobody waits for any more is
+// replaced rather than left blocking the goroutine.
+func send[T any](results chan T, result T) {
+	select {
+	case results <- result:
+	default:
+		select {
+		case <-results:
+		default:
+		}
+		results <- result
+	}
+}
+
+// readPortrait reads the body and the head of a sex, seats the head on the
+// body, reads the game data a character is made from, and draws the head
+// with the parts the DNA picks, the template ethnicity's for none. It is
+// plain Go, which runs off the thread that draws.
+func readPortrait(set *folders.Set, sex genes.Sex, dna *genes.DNA, from basis) portraitResult {
+	result := portraitResult{sex: sex, basis: from}
+	assets := asset.Load(set)
+	loader := entity.NewLoader(set, assets)
+	bodyEntity, _ := entitiesOf(sex)
 
 	body, diagnostics, err := loader.Load(bodyEntity)
 	if err != nil {
@@ -201,113 +297,186 @@ func readPortrait(set *folders.Set) portraitResult {
 	}
 
 	result.diagnostics = append(result.diagnostics, diagnostics...)
+	result.loader, result.body = loader, body
+	result.assets = assets
 
-	head, diagnostics, err := loader.Load(headEntity)
-	if err != nil {
-		return portraitResult{err: err}
-	}
+	result.animations, diagnostics = genes.LoadAnimations(set)
+	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
 
-	result.diagnostics = append(result.diagnostics, diagnostics...)
+	// How the game stages a portrait: the environments that light it, the
+	// cameras that look at it, and what every environment shares.
+	result.set = set
 
-	// A head that cannot be seated is still drawn, where its mesh puts it.
-	if err := seat(body, head); err != nil {
-		result.diagnostics = append(result.diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "entity " + headEntity, Message: err.Error()})
-	}
+	result.environments, diagnostics = staged.LoadEnvironments(set)
+	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
 
-	result.body, result.head = body, head
+	result.cameras, diagnostics = staged.LoadCameras(set)
+	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
+
+	result.settings, diagnostics = staged.LoadSettings(set)
+	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
 
 	// What the genes files hold that is worth knowing is a warning or worse;
 	// the rest is about fields the parser keeps without reading.
 	result.genes = genes.Load(set)
 	result.diagnostics = append(result.diagnostics, result.genes.Diagnostics.Filter(report.SeverityWarning)...)
 
-	ethnicities, diagnostics := genes.LoadEthnicities(set)
+	result.ethnicities, diagnostics = genes.LoadEthnicities(set)
 	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
 
-	if ethnicity, err := genes.Flatten(ethnicities, portraitEthnicity); err == nil {
-		result.ethnicity = ethnicity
-	} else {
-		result.diagnostics = append(result.diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "ethnicity " + portraitEthnicity, Message: err.Error() + "; the portrait is neutral"})
+	result.characters, diagnostics = genes.LoadDNA(set)
+	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
+
+	result.accessories, diagnostics = genes.LoadAccessories(set)
+	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
+
+	// A portrait started from scratch is the template ethnicity, every
+	// gene neutral, as the game's portrait editor shows it.
+	if result.basis.kind == basisScratch {
+		ethnicity, err := genes.Flatten(result.ethnicities, templateEthnicity)
+		if err != nil {
+			result.diagnostics = append(result.diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "ethnicity " + templateEthnicity, Message: err.Error() + "; the portrait is neutral"})
+		}
+
+		result.basis = basis{kind: basisScratch, key: templateEthnicity, ethnicity: ethnicity}
 	}
 
-	// The palette the colour of the skin is picked from by the two numbers a
-	// DNA gives it.
-	palette, err := readTexture(set, skinPalette)
-	if err != nil {
-		result.diagnostics = append(result.diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: skinPalette, Message: err.Error() + "; the skin is drawn in a stand in tone"})
+	if dna == nil {
+		dna = result.genes.Preview(result.basis.ethnicity, genes.PreviewNeutral)
 	}
 
-	result.skinPalette = palette
+	result.dna = dna
+
+	// The palettes the colours of the skin, the hair and the eyes are
+	// picked from by the two numbers a DNA gives each.
+	result.palettes, result.swatches = map[string]*texture.Image{}, map[string]*image.RGBA{}
+
+	for what, path := range palettePaths {
+		palette, err := readTexture(set, path)
+		if err != nil {
+			result.diagnostics = append(result.diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: path, Message: err.Error() + "; drawn in a stand in colour"})
+
+			continue
+		}
+
+		result.palettes[what], result.swatches[what] = palette, swatchOf(palette)
+	}
 
 	// The textures of the decals the genes lay over the skin.
 	decals, diagnostics := readDecalTextures(set, result.genes)
 	result.diagnostics = append(result.diagnostics, diagnostics...)
 	result.decals = decals
 
-	// The parts of the head are the same however the DNA is previewed:
-	// every ethnicity of the game lists none of them.
-	neutral := result.genes.Preview(result.ethnicity, genes.PreviewNeutral)
+	parts, diagnostics := headParts(result.genes, result.accessories, dna, sex)
+	result.diagnostics = append(result.diagnostics, diagnostics...)
 
-	accessories, diagnostics := genes.LoadAccessories(set)
-	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
-
-	for _, gene := range headParts {
-		name, err := headPart(result.genes, accessories, neutral, gene)
-		if err == nil {
-			var built *model.Model
-
-			built, diagnostics, err = loader.Load(name)
-			result.diagnostics = append(result.diagnostics, diagnostics...)
-
-			if err == nil && !head.SharePose(built) {
-				err = errors.New("the head has no skeleton to pose it with")
-			}
-		}
-
-		if err != nil {
-			result.diagnostics = append(result.diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "gene " + gene, Message: err.Error() + "; drawn without it"})
-		}
+	head, diagnostics, err := buildHead(loader, sex, body, parts)
+	if err != nil {
+		return portraitResult{err: err}
 	}
+
+	result.diagnostics = append(result.diagnostics, diagnostics...)
+	result.head, result.parts = head, parts
 
 	return result
 }
 
-// headPart finds the entity of a part of the head that an accessory gene
-// draws: the template a DNA picks, or the gene's first, the accessory its
-// strength picks for a man, and the entity of that accessory posed with the
-// head.
-func headPart(all *genes.Genes, accessories database.Table[genes.Accessory], dna *genes.DNA, name string) (string, error) {
-	gene, ok := all.AccessoryGenes.Get(name)
-	if !ok || len(gene.Templates) == 0 {
-		return "", fmt.Errorf("there is no accessory gene %s", name)
-	}
+// swatchOf is a palette as pixels the interface can show, worked out from
+// its blocks where it is compressed.
+func swatchOf(palette *texture.Image) *image.RGBA {
+	swatch := image.NewRGBA(image.Rect(0, 0, palette.Width, palette.Height))
 
-	template, strength := &gene.Templates[0], 0.0
-
-	if dna != nil {
-		if value, ok := dna.Gene(name); ok {
-			if chosen, ok := gene.Template(value.Dominant.Template); ok {
-				template, strength = chosen, value.Dominant.Strength()
-			}
+	for y := range palette.Height {
+		for x := range palette.Width {
+			colour, _ := palette.Colour(x, y)
+			copy(swatch.Pix[swatch.PixOffset(x, y):], colour[:])
 		}
 	}
 
-	choice, ok := template.For(portraitSex).Pick(strength)
-	if !ok {
-		return "", fmt.Errorf("template %s picks no accessory for a man", template.Name)
+	return swatch
+}
+
+// headParts are the entities the accessory genes of a DNA draw with the head,
+// posed as it is, in the order of the genes: the eyes, the teeth, the hair,
+// the beard. A gene that picks an accessory that draws nothing, such as no
+// hair, draws nothing; one that picks an accessory that is not there is
+// reported.
+func headParts(all *genes.Genes, accessories database.Table[genes.Accessory], dna *genes.DNA, sex genes.Sex) ([]string, report.Diagnostics) {
+	var (
+		parts       []string
+		diagnostics report.Diagnostics
+	)
+
+	for key, gene := range all.AccessoryGenes.All() {
+		if len(gene.Templates) == 0 {
+			continue
+		}
+
+		templates := byIndex(gene.Templates)
+		template, strength := &templates[0], 0.0
+
+		if allele, ok := dominant(dna, key); ok {
+			if chosen, ok := gene.Template(allele.Template); ok {
+				template, strength = chosen, allele.Strength()
+			}
+		}
+
+		choice, ok := template.For(sex).Pick(strength)
+		if !ok || choice.Accessory == emptyAccessory {
+			continue
+		}
+
+		accessory, ok := accessories.Get(choice.Accessory)
+		if !ok {
+			diagnostics = append(diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "gene " + key, Message: fmt.Sprintf("there is no portrait accessory %s; drawn without it", choice.Accessory)})
+
+			continue
+		}
+
+		chosen, ok := accessory.Choose(nil)
+		if ok && chosen.Entity != "" && chosen.SharedPoseEntity == headPose {
+			parts = append(parts, chosen.Entity)
+		}
 	}
 
-	accessory, ok := accessories.Get(choice.Accessory)
-	if !ok {
-		return "", fmt.Errorf("there is no portrait accessory %s", choice.Accessory)
+	return parts, diagnostics
+}
+
+// buildHead reads the head of a sex, seats it on the body, and adds the parts
+// posed with it. A part that cannot be read is reported, and the head drawn
+// without it.
+func buildHead(loader *entity.Loader, sex genes.Sex, body *model.Model, parts []string) (*model.Model, report.Diagnostics, error) {
+	_, headEntity := entitiesOf(sex)
+
+	head, diagnostics, err := loader.Load(headEntity)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	chosen, ok := accessory.Choose(nil)
-	if !ok || chosen.Entity == "" || chosen.SharedPoseEntity != "head" {
-		return "", fmt.Errorf("portrait accessory %s draws no entity posed with the head", choice.Accessory)
+	// A head that cannot be seated is still drawn, where its mesh puts it.
+	if err := seat(body, head); err != nil {
+		diagnostics = append(diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "entity " + headEntity, Message: err.Error()})
+	} else {
+		// Where the neck meets the body the two meshes share a ring of
+		// vertices whose normals the game's files have disagree, which the
+		// light would draw as a seam; the head takes the body's there.
+		head.MatchNormals(body, seamTolerance)
 	}
 
-	return chosen.Entity, nil
+	for _, name := range parts {
+		part, read, err := loader.Load(name)
+		diagnostics = append(diagnostics, read...)
+
+		if err == nil && !head.SharePose(part) {
+			err = errors.New("the head has no skeleton to pose it with")
+		}
+
+		if err != nil {
+			diagnostics = append(diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "entity " + name, Message: err.Error() + "; drawn without it"})
+		}
+	}
+
+	return head, diagnostics, nil
 }
 
 // seat places the head where the game attaches it to the body: with its
@@ -315,12 +484,12 @@ func headPart(all *genes.Genes, accessories database.Table[genes.Accessory], dna
 func seat(body, head *model.Model) error {
 	thoracic, ok := body.Joint(bodyJoint)
 	if !ok {
-		return fmt.Errorf("%s has no joint %s to attach the head to; the head is drawn where its mesh puts it", bodyEntity, bodyJoint)
+		return fmt.Errorf("%s has no joint %s to attach the head to; the head is drawn where its mesh puts it", body.Name, bodyJoint)
 	}
 
 	root, ok := head.Joint(headJoint)
 	if !ok {
-		return fmt.Errorf("%s has no joint %s to attach it by; it is drawn where its mesh puts it", headEntity, headJoint)
+		return fmt.Errorf("%s has no joint %s to attach it by; it is drawn where its mesh puts it", head.Name, headJoint)
 	}
 
 	undo, ok := root.Inverse()
@@ -333,9 +502,12 @@ func seat(body, head *model.Model) error {
 	return nil
 }
 
-// poll picks up a finished load and uploads its models. It reports whether a
-// load finished, and runs on the goroutine that owns the OpenGL context.
+// poll picks up a finished load, or a head read again, and uploads its
+// models. It reports whether a load finished, and runs on the goroutine that
+// owns the OpenGL context.
 func (p *portrait) poll() bool {
+	p.pollHead()
+
 	select {
 	case result := <-p.results:
 		if result.generation != p.generation {
@@ -374,11 +546,29 @@ func (p *portrait) poll() bool {
 		// the body's additive animations move.
 		head.Follow(body, headLinks...)
 
-		p.genes, p.ethnicity = result.genes, result.ethnicity
-		p.skinPalette = result.skinPalette
+		p.sex, p.loader, p.bodySource, p.parts = result.sex, result.loader, result.body, result.parts
+		p.genes, p.ethnicities, p.characters, p.accessories = result.genes, result.ethnicities, result.characters, result.accessories
+		p.palettes, p.swatches = result.palettes, result.swatches
 		p.decalTextures, p.decalProblem = result.decals, ""
-		p.morphs = newMorphs(result.genes, nil, append(body.Attributes(), head.Attributes()...))
-		p.apply(result.genes.Preview(result.ethnicity, p.preview))
+		p.basis = result.basis
+
+		age := int32(defaultAge)
+		if p.character != nil {
+			age = p.character.age
+		}
+
+		if given, ok := result.dna.Age.Get(); ok {
+			age = ageOf(given)
+		}
+
+		p.character = newCharacter(result.genes, result.sex, result.dna, append(body.Attributes(), head.Attributes()...))
+		p.character.age = age
+		p.character.partsChanged = false
+
+		p.animation.prepare(result.animations, result.assets, result.body, result.head)
+		p.staging.prepare(result.set, result.environments, result.cameras, result.settings)
+		p.animation.restart(p.sex)
+		p.highlight.forget()
 
 		p.framing = true
 
@@ -389,20 +579,89 @@ func (p *portrait) poll() bool {
 	}
 }
 
-// apply sets the portrait as a DNA has it: its morph genes, and the colour of
-// its skin, picked from the skin palette by the dominant allele of its
-// skin_color.
-func (p *portrait) apply(dna *genes.DNA) {
-	p.morphs.reset(dna)
-	p.viewer.Look.PaletteColor = render.DefaultLook.PaletteColor
+// pollHead picks up a head read again with other parts, and draws it in the
+// place of the one drawn.
+func (p *portrait) pollHead() {
+	select {
+	case result := <-p.heads:
+		p.rebuilding = false
 
-	value, ok := dna.Gene(skinColorGene)
-	if !ok {
+		if result.generation != p.generation || p.body == nil {
+			return
+		}
+
+		p.diagnostics = append(p.diagnostics, result.diagnostics...)
+
+		if result.err != nil {
+			warn(result.err)
+
+			return
+		}
+
+		head, err := p.renderer.Upload(result.head)
+		if err != nil {
+			warn(err)
+
+			return
+		}
+
+		p.head.Unload()
+		p.head, p.parts = head, result.parts
+		head.Follow(p.body, headLinks...)
+		p.animation.headChanged(result.head)
+		p.animation.restart(p.sex)
+
+		// The new head is morphed and has its decals laid like the old one.
+		p.character.changed = true
+		p.highlight.forget()
+
+	default:
+	}
+}
+
+// rebuildHead reads the head again on a goroutine of its own when the
+// accessory genes pick other parts for it than it is drawn with. While a
+// head is being read, another change waits for it.
+func (p *portrait) rebuildHead() {
+	if p.rebuilding || p.loader == nil || !p.character.partsChanged {
 		return
 	}
 
-	if colour, ok := p.skinPalette.Sample(float64(value.Dominant.Value)/maxGeneValue, float64(value.Dominant.Second)/maxGeneValue); ok {
-		p.viewer.Look.PaletteColor = render.PaletteColour(colour)
+	p.character.partsChanged = false
+
+	parts, diagnostics := headParts(p.genes, p.accessories, p.character.dna(), p.sex)
+	p.diagnostics = append(p.diagnostics, diagnostics...)
+
+	if slices.Equal(parts, p.parts) {
+		return
+	}
+
+	p.rebuilding = true
+	generation, loader, sex, body := p.generation, p.loader, p.sex, p.bodySource
+
+	go func() {
+		head, diagnostics, err := buildHead(loader, sex, body, parts)
+		send(p.heads, headResult{generation: generation, head: head, parts: parts, diagnostics: diagnostics, err: err})
+	}()
+}
+
+// colour sets the colours of the skin, the hair and the eyes from the
+// palettes, where the colour genes pick them, as the DNA's two numbers for
+// each from 0 to 255. A palette that could not be read leaves its colour as
+// the renderer has it.
+func (p *portrait) colour() {
+	look := &p.viewer.Look
+	look.PaletteColor, look.HairColor, look.EyeColor = render.DefaultLook.PaletteColor, render.DefaultLook.HairColor, render.DefaultLook.EyeColor
+
+	for what, target := range map[string]*[3]float32{"skin": &look.PaletteColor, "hair": &look.HairColor, "eye": &look.EyeColor} {
+		gene, ok := p.character.colour(what)
+		if !ok {
+			continue
+		}
+
+		if colour, ok := p.palettes[what].Sample(float64(gene.value[0])/maxGeneValue, float64(gene.value[1])/maxGeneValue); ok {
+			*target = render.PaletteColour(colour)
+		}
 	}
 }
 
@@ -441,10 +700,25 @@ func (p *portrait) face() [2][3]float32 {
 	return box
 }
 
+// frame points the camera at the face or the whole figure, whichever it is
+// set to frame.
+func (p *portrait) frame() {
+	if p.staging.look(p) {
+		return
+	}
+
+	if p.figure {
+		p.frameFigure()
+	} else {
+		p.frameFace()
+	}
+}
+
 // frameFace points the camera at the head from the front, which is where the
 // morph genes show.
 func (p *portrait) frameFace() {
 	face := p.face()
+	p.viewer.FieldOfView = 0
 	p.viewer.Frame(face[0], face[1])
 	p.viewer.Reset()
 }
@@ -453,6 +727,7 @@ func (p *portrait) frameFace() {
 // and the head where it is now.
 func (p *portrait) frameFigure() {
 	face := p.face()
+	p.viewer.FieldOfView = 0
 
 	for axis := range 3 {
 		face[0][axis] = min(face[0][axis], p.body.Min[axis])
@@ -465,12 +740,13 @@ func (p *portrait) frameFigure() {
 
 // loaded reports whether there is a portrait to show.
 func (p *portrait) loaded() bool {
-	return p.body != nil && p.head != nil
+	return p.body != nil && p.head != nil && p.character != nil
 }
 
-// draw morphs the models by the genes if they changed, and draws them into
-// the viewer's picture, at the size the panel last had for it. It runs
-// before the interface, while raylib drawing is active.
+// draw morphs the models by the genes if they changed, highlights what is
+// pointed at, and draws the models into the viewer's picture, at the size
+// the panel last had for it. It runs before the interface, while raylib
+// drawing is active.
 func (p *portrait) draw() {
 	if p.width > 0 && p.height > 0 {
 		p.viewer.Resize(p.width, p.height)
@@ -482,19 +758,35 @@ func (p *portrait) draw() {
 		return
 	}
 
-	if p.morphs.changed {
-		attributes := p.morphs.attributes()
+	p.rebuildHead()
+
+	if p.character.coloursChanged {
+		p.colour()
+		p.character.coloursChanged = false
+
+		// The skin colour is blended into the decals as they are laid.
+		p.character.changed = true
+	}
+
+	if p.character.changed {
+		attributes := p.character.attributes()
 		p.body.Morph(attributes)
 		p.head.Morph(attributes)
 		p.layDecals()
-		p.morphs.changed = false
+		p.character.changed = false
 	}
 
-	if p.framing {
-		p.frameFace()
+	p.animation.pose(p.loader, p.body, p.head)
+	p.highlight.update(p)
+
+	// The face is framed once the panel has given the picture its size,
+	// which the framing fits the face to.
+	if p.framing && p.width > 1 && p.height > 1 {
+		p.frame()
 		p.framing = false
 	}
 
+	p.viewer.Look.Lighting = p.staging.lighting(p)
 	p.viewer.Draw(p.body, p.head)
 }
 
@@ -502,7 +794,7 @@ func (p *portrait) draw() {
 // skin of the body and the head, in the skin colour of the look. A decal
 // that cannot be laid is reported once, and the portrait drawn without it.
 func (p *portrait) layDecals() {
-	decals := p.morphs.decals(p.decalTextures)
+	decals := p.character.decals(p.decalTextures)
 
 	for _, uploaded := range []*render.Model{p.body, p.head} {
 		err := uploaded.LayDecals(decals, p.viewer.Look)
@@ -523,18 +815,54 @@ func (p *portrait) unloadModels() {
 	}
 
 	p.body, p.head = nil, nil
-	p.genes, p.ethnicity, p.morphs = nil, nil, morphs{}
+	p.character, p.parts = nil, nil
+	p.highlight.forget()
 }
 
 // unload releases everything on the GPU. It needs the OpenGL context.
 func (p *portrait) unload() {
 	p.unloadModels()
+	p.staging.unload()
 	p.viewer.Unload()
 	p.renderer.Unload()
 }
 
-// startPortrait loads the portrait from the folders in the settings, or says
-// what is missing.
+// start draws the portrait from a DNA of a sex: the character's genes are set
+// as the DNA has them, and the head drawn with the parts it picks. Another
+// sex is another body and head, which are loaded anew.
+func (a *App) start(from basis, dna *genes.DNA, sex genes.Sex) {
+	p := a.portrait
+	if p == nil {
+		return
+	}
+
+	// A boy and a man, or a girl and a woman, share their body and head:
+	// only the settings of the genes change between them.
+	body, _ := entitiesOf(sex)
+	loaded, _ := entitiesOf(p.sex)
+
+	if !p.loaded() || body != loaded {
+		p.load(a.settings.Folders, sex, dna, from)
+		a.setStatus("Loading the portrait")
+
+		return
+	}
+
+	p.basis = from
+	p.sex, p.character.sex = sex, sex
+	p.character.reset(dna)
+	p.animation.restart(sex)
+	p.framing = true
+
+	if age, ok := dna.Age.Get(); ok {
+		p.character.age = ageOf(age)
+	}
+
+	p.highlight.forget()
+}
+
+// startPortrait loads the portrait from the folders in the settings, from
+// scratch, or says what is missing.
 func (a *App) startPortrait() {
 	if a.portrait == nil {
 		return
@@ -547,7 +875,7 @@ func (a *App) startPortrait() {
 		return
 	}
 
-	a.portrait.load(a.settings.Folders)
+	a.portrait.load(a.settings.Folders, genes.Male, nil, basis{})
 	a.setStatus("Loading the portrait")
 }
 
@@ -571,163 +899,4 @@ func (a *App) pollPortrait() {
 // hasFolders reports whether any game or mod folder is configured.
 func (a *App) hasFolders() bool {
 	return len(a.settings.Folders) > 0
-}
-
-// previewPanel shows the portrait, which the mouse turns: dragged with the
-// left button to turn it, the wheel to come closer, a double click to look at
-// it from the front again.
-func (a *App) previewPanel() {
-	defer imgui.End()
-
-	if !imgui.Begin(panelPreview) {
-		return
-	}
-
-	switch {
-	case a.portrait == nil:
-		imgui.TextDisabled("The 3D view could not be started")
-
-		return
-
-	case !a.hasFolders():
-		emptyState("No game folder configured", "Add the game's folder in Settings (Ctrl+,)")
-
-		return
-
-	case a.portrait.problem != nil:
-		emptyState("The portrait could not be loaded", a.portrait.problem.Error())
-
-		return
-
-	case !a.portrait.loaded():
-		emptyState("Loading the portrait...")
-
-		return
-	}
-
-	available := imgui.ContentRegionAvail()
-	a.portrait.width, a.portrait.height = int32(max(available.X, 1)), int32(max(available.Y, 1))
-
-	width, height := a.portrait.viewer.Size()
-
-	// The picture is drawn at the size the panel had last frame, which is
-	// what it is shown at too, so that resizing the panel never stretches it.
-	a.window.Backend().DrawImageRenderTexture(a.portrait.viewer.Target(), imgui.Vec2{X: float32(width), Y: float32(height)}, true, false)
-
-	if !imgui.IsItemHovered() {
-		return
-	}
-
-	io := imgui.CurrentIO()
-
-	if imgui.IsMouseDragging(imgui.MouseButtonLeft) {
-		delta := io.MouseDelta()
-		a.portrait.viewer.Rotate(float64(delta.X)*turnPerPixel, float64(delta.Y)*turnPerPixel)
-	}
-
-	if wheel := io.MouseWheel(); wheel != 0 {
-		a.portrait.viewer.Zoom(math.Pow(zoomPerNotch, float64(wheel)))
-	}
-
-	if imgui.IsMouseDoubleClicked(imgui.MouseButtonLeft) {
-		a.portrait.viewer.Reset()
-	}
-
-	imgui.SetTooltip("Drag to turn, scroll to zoom, double click to reset")
-}
-
-// characterPanel shows whose genes the portrait has, lets the morph genes be
-// changed, and says what went wrong loading it.
-func (a *App) characterPanel() {
-	defer imgui.End()
-
-	if !imgui.Begin(panelCharacter) {
-		return
-	}
-
-	if a.portrait == nil || !a.portrait.loaded() {
-		imgui.TextDisabled("Nothing loaded yet")
-
-		return
-	}
-
-	p := a.portrait
-
-	sectionHeader("Ethnicity")
-
-	if p.ethnicity != nil {
-		imgui.TextUnformatted(p.ethnicity.Key)
-	} else {
-		imgui.TextDisabled(portraitEthnicity + " is not among the game's ethnicities")
-	}
-
-	labelWidth := func(label string) float32 {
-		return -imgui.CalcTextSize(label).X - imgui.CurrentStyle().ItemInnerSpacing().X
-	}
-
-	imgui.SetNextItemWidth(labelWidth("Preview"))
-
-	if imgui.BeginCombo("Preview", previewNames[p.preview]) {
-		for index, name := range previewNames {
-			preview := genes.Preview(index)
-
-			if imgui.SelectableBoolV(name, preview == p.preview, 0, imgui.Vec2{}) {
-				p.preview = preview
-				p.apply(p.genes.Preview(p.ethnicity, preview))
-			}
-
-			imgui.SetItemTooltip(previewHelp[index])
-		}
-
-		imgui.EndCombo()
-	}
-
-	if imgui.Button("Reset to Ethnicity") {
-		p.apply(p.genes.Preview(p.ethnicity, p.preview))
-	}
-
-	imgui.SetNextItemWidth(labelWidth("Age"))
-
-	if imgui.SliderIntV("Age", &p.morphs.age, 0, maxAge, "%d%%", imgui.SliderFlagsAlwaysClamp) {
-		p.morphs.changed = true
-	}
-
-	sectionHeader("View")
-
-	if imgui.Button("Face") {
-		p.frameFace()
-	}
-
-	imgui.SameLine()
-
-	if imgui.Button("Whole Figure") {
-		p.frameFigure()
-	}
-
-	imgui.SameLine()
-	imgui.TextDisabled(fmt.Sprintf("turned %.0f°, tilted %.0f°", p.viewer.Yaw*180/math.Pi, p.viewer.Pitch*180/math.Pi))
-
-	if len(p.diagnostics) > 0 && imgui.CollapsingHeaderTreeNodeFlags(fmt.Sprintf("Problems (%d)###problems", len(p.diagnostics))) {
-		for _, diagnostic := range p.diagnostics {
-			dimmedWrapped(diagnostic.String())
-		}
-	}
-
-	sectionHeader("Morph Genes")
-	p.morphs.panel()
-}
-
-// emptyState draws dimmed lines in the middle of a panel, saying why it has
-// nothing in it.
-func emptyState(lines ...string) {
-	available := imgui.ContentRegionAvail()
-	lineHeight := imgui.TextLineHeightWithSpacing()
-
-	imgui.Dummy(imgui.Vec2{Y: max((available.Y-lineHeight*float32(len(lines)))/2, 0)})
-
-	for _, line := range lines {
-		width := imgui.CalcTextSize(line).X
-		imgui.SetCursorPosX(imgui.CursorPosX() + max((available.X-width)/2, 0))
-		imgui.TextDisabled(line)
-	}
 }

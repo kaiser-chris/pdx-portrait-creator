@@ -1,0 +1,62 @@
+package app
+
+import "testing"
+
+// Every gene the catalogue knows is in one category, under a name of its
+// own there, and Other and Colours are where the panel expects them.
+func TestCatalogue(t *testing.T) {
+	seen := map[string]string{}
+
+	for _, category := range categories {
+		names := map[string]bool{}
+
+		for _, gene := range category.genes {
+			if other, ok := seen[gene.key]; ok {
+				t.Errorf("%s is in %s and %s", gene.key, other, category.id)
+			}
+
+			if names[gene.name] {
+				t.Errorf("%s is named %q twice", category.id, gene.name)
+			}
+
+			seen[gene.key], names[gene.name] = category.id, true
+		}
+	}
+
+	index := newCatalogue()
+
+	if category, name := index.place("gene_nose_size"); categories[category].id != "nose" || name != "Nose Size" {
+		t.Errorf("gene_nose_size is %s %q", categories[category].id, name)
+	}
+
+	// A gene the catalogue does not know, such as a mod's, is Other, by its
+	// key.
+	if category, name := index.place("gene_mod_freckles"); categories[category].id != categoryOther || name != "gene_mod_freckles" {
+		t.Errorf("gene_mod_freckles is %s %q", categories[category].id, name)
+	}
+}
+
+// The keys of the game's files are shown as words.
+func TestFriendly(t *testing.T) {
+	for key, want := range map[string]string{
+		"european_hairstyles":   "European Hairstyles",
+		"male_hair_european_01": "Male Hair European 01",
+		"abraham_lincoln":       "Abraham Lincoln",
+		"":                      "",
+		"__odd__key":            "Odd Key",
+	} {
+		if got := friendly(key); got != want {
+			t.Errorf("friendly(%q) = %q, want %q", key, got, want)
+		}
+	}
+}
+
+// A strength is shown from -100 to 100 around the middle a neutral DNA leaves
+// a gene at, as a label that holds no verb of a format.
+func TestSigned(t *testing.T) {
+	for value, want := range map[int32]string{0: "-100", 127: "0", 128: "0", 140: "+10", 255: "+100"} {
+		if got := signed(value); got != want {
+			t.Errorf("signed(%d) = %q, want %q", value, got, want)
+		}
+	}
+}
