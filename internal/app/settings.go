@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"slices"
 
 	"github.com/AllenDang/cimgui-go/imgui"
 
@@ -182,11 +183,17 @@ func (a *App) saveSettings() {
 		return
 	}
 
+	foldersChanged := !slices.Equal(a.settings.Folders, saved.Folders)
 	a.settings = saved
 
 	// The half filled rows were dropped, so the window shows what was stored.
 	a.state.loadFrom(a.settings)
 	a.setStatus("Settings saved")
+
+	// What the portrait is read from may have changed.
+	if foldersChanged {
+		a.startPortrait()
+	}
 }
 
 // settingsChanged reports whether the settings window holds edits that have

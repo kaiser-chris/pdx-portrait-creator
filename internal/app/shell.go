@@ -140,25 +140,6 @@ func (a *App) closeFocusedWindow() {
 	a.state.focusedWindow = ""
 }
 
-// previewPanel will show the portrait. For now it holds its place in the
-// layout.
-func (a *App) previewPanel() {
-	if imgui.Begin(panelPreview) {
-		imgui.TextDisabled("No character loaded")
-	}
-
-	imgui.End()
-}
-
-// characterPanel will hold the editing controls for the character.
-func (a *App) characterPanel() {
-	if imgui.Begin(panelCharacter) {
-		imgui.TextDisabled("Nothing to edit yet")
-	}
-
-	imgui.End()
-}
-
 func (a *App) aboutWindow() {
 	if !a.state.showAbout {
 		return

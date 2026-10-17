@@ -1,8 +1,16 @@
 # PDX Portrait Creator
 
 A character portrait editor for Paradox games. It is being built step by step;
-for now it is the application shell: a window with dockable panels that the
-editor will fill.
+for now it shows a man of Victoria 3's portraits in 3D, read from the game
+folder configured in the settings, as the game's portrait editor previews the
+ethnicity every other builds on, `ethnicity_template`: neutral, or at the
+likeliest of its choices. He has his eyes, eyelashes and teeth, his skin tone
+from the game's skin palette, and his head joined to his body the way the game
+joins them. The mouse turns him: drag to turn, scroll to zoom, double click to
+look from the front again. The panel beside him sets his age and lists every
+morph gene of the game, the genes that shape a face and a body and lay
+wrinkles, stubble and eyebrows over his skin, with a slider for each, which
+reshapes him as it moves.
 
 It runs on Windows and Linux. On Linux its file dialogs need `zenity` or
 `kdialog`, one of which most desktops already have.
@@ -26,7 +34,9 @@ The application is written in Go. Its interface is
 [cimgui-go](https://github.com/AllenDang/cimgui-go), drawn with
 [raylib](https://github.com/gen2brain/raylib-go), which also renders the
 portrait itself. Game files are read with
-[pdx-parser-go](https://github.com/kaiser-chris/pdx-parser-go).
+[pdx-parser-go](https://github.com/kaiser-chris/pdx-parser-go), and the 3D
+models are read and drawn with
+[pdx-asset-go](https://github.com/kaiser-chris/pdx-asset-go).
 
 ### Requirements
 
@@ -51,19 +61,22 @@ builds reuse Go's build cache.
 | `make run` | Builds and starts the application. |
 | `make release` | Builds an optimised binary, without a console window on Windows. |
 | `make test` | Runs the tests. |
-| `make uitest` | Runs the interface tests, which drive the real application in a hidden window and need a display. |
+| `make uitest` | Runs the interface and GPU tests, which drive the real application in a hidden window and need a display. |
+| `make gametest PDX_GAME_DIR=...` | Also runs the tests against a real installation, such as `"C:/Steam/steamapps/common/Victoria 3/game"`. |
 | `make vet` | Runs `go vet`. |
 
 Without make, `build.bat` on Windows and `build.sh` on Linux build a release
 binary.
 
-### Working on pdx-parser-go alongside
+### pdx-asset-go and pdx-parser-go
 
-To build against a checkout of pdx-parser-go next to this repository rather
-than the released module, create a Go workspace, which git ignores:
+pdx-asset-go is not released yet, and the genes the application reads are in
+no release of pdx-parser-go yet, so for now the application builds against
+checkouts of both next to this repository, through a Go workspace, which git
+ignores:
 
 ```
-go work init . ../pdx-parser-go
+go work init . ../pdx-asset-go ../pdx-parser-go
 ```
 
 ### Layout

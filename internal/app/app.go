@@ -37,6 +37,10 @@ type App struct {
 	// dialogs asks the user for files and folders.
 	dialogs fileDialogs
 
+	// portrait is what the portrait panel shows. It is nil when the 3D view
+	// could not be started.
+	portrait *portrait
+
 	// dockWindowClass is handed to the dock space every frame. cimgui-go
 	// dereferences that argument even when it is nil, so one default instance
 	// is allocated for the lifetime of the application instead.
@@ -110,9 +114,25 @@ func New(options Options) (*App, error) {
 	application.dialogs = systemDialogs{parent: dialogParent()}
 
 	application.dockWindowClass = imgui.NewWindowClass()
+
+	// The 3D view needs the OpenGL context the window just created. Without
+	// it the rest of the application still works, so a view that cannot be
+	// started is reported rather than refused.
+	application.portrait, err = newPortrait()
+	if err != nil {
+		warn(err)
+		application.state.status = "The 3D view could not be started"
+	}
+
 	application.window.OnShutdown(func() {
+		if application.portrait != nil {
+			application.portrait.unload()
+		}
+
 		application.dockWindowClass.Destroy()
 	})
+
+	application.startPortrait()
 
 	return application, nil
 }
@@ -130,7 +150,17 @@ func (a *App) Close() {
 }
 
 func (a *App) frameSpec() gui.Frame {
-	return gui.Frame{UI: a.frame}
+	return gui.Frame{Offscreen: a.offscreen, UI: a.frame}
+}
+
+// offscreen draws what the interface shows of the GPU's own drawing, before
+// the interface samples it.
+func (a *App) offscreen() {
+	a.pollPortrait()
+
+	if a.portrait != nil {
+		a.portrait.draw()
+	}
 }
 
 func openStore(dir string) (config.Store, error) {

@@ -11,7 +11,7 @@ endif
 
 OUTPUT := bin/$(PLATFORM)/$(BINARY_NAME)
 
-.PHONY: build release run test uitest vet fmt tidy clean
+.PHONY: build release run test uitest gametest vet fmt tidy clean
 
 
 ## build: compile a development binary
@@ -36,6 +36,11 @@ test:
 ## uitest: drive the real application in a hidden window; needs a display
 uitest:
 	go test -tags uitest -count=1 ./...
+
+## gametest: also run the tests against a real installation, for example
+##   make gametest PDX_GAME_DIR="C:/Steam/steamapps/common/Victoria 3/game"
+gametest:
+	PDX_GAME_DIR="$(PDX_GAME_DIR)" go test -tags uitest -count=1 -v ./...
 
 vet:
 	go vet ./...
