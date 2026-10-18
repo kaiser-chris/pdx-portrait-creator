@@ -568,12 +568,26 @@ func (a *App) colourList(changed map[string]bool) {
 			continue
 		}
 
-		a.palettePicker(colour, swatch)
+		left, width := a.palettePicker(colour, swatch)
 
-		// Where in the palette the colour is, and the way back to the
-		// basis's, below the palette, which takes the width of the panel.
-		imgui.AlignTextToFramePadding()
-		imgui.TextDisabled(fmt.Sprintf("%d, %d", colour.value[0], colour.value[1]))
+		// Where in the palette the colour is, to type in, as wide as the
+		// palette and beneath it, and the way back to the basis's beside it.
+		imgui.SetCursorPosX(left)
+		imgui.SetNextItemWidth(width)
+
+		place := colour.value
+		if imgui.InputInt2("##place", &place) {
+			for axis := range place {
+				place[axis] = min(max(place[axis], 0), maxGeneValue)
+			}
+
+			if place != colour.value {
+				colour.value = place
+				c.coloursChanged = true
+			}
+		}
+
+		imgui.SetItemTooltip("Where the colour is in the palette, across and down, from 0 to 255")
 
 		if changed[colour.gene.Key] {
 			imgui.SameLine()
@@ -592,17 +606,23 @@ func (a *App) colourList(changed map[string]bool) {
 
 // palettePicker draws a palette to pick a colour gene's place in by clicking
 // or dragging, with the place marked and the rectangles of the ethnicity
-// outlined.
-func (a *App) palettePicker(colour *colourGene, swatch *image.RGBA) {
+// outlined. A palette held to paletteHeight is narrower than the panel, and
+// stands in the middle of it; it returns where the palette's left edge is,
+// as a cursor position, and its width, for what is drawn beneath it.
+func (a *App) palettePicker(colour *colourGene, swatch *image.RGBA) (left, width float32) {
 	p := a.portrait
 
 	bounds := swatch.Bounds()
-	width := imgui.ContentRegionAvail().X
+	available := imgui.ContentRegionAvail().X
+	width = available
 	height := width * float32(bounds.Dy()) / float32(bounds.Dx())
 
 	if limit := gui.Scaled(paletteHeight); height > limit {
 		width, height = limit*float32(bounds.Dx())/float32(bounds.Dy()), limit
 	}
+
+	left = imgui.CursorPosX() + (available-width)/2
+	imgui.SetCursorPosX(left)
 
 	size := imgui.Vec2{X: width, Y: height}
 	origin := imgui.CursorScreenPos()
@@ -646,6 +666,7 @@ func (a *App) palettePicker(colour *colourGene, swatch *image.RGBA) {
 	draw.AddCircleV(marker, gui.Scaled(6), imgui.ColorConvertFloat4ToU32(imgui.Vec4{W: 1}), 0, gui.Scaled(3))
 	draw.AddCircleV(marker, gui.Scaled(6), imgui.ColorConvertFloat4ToU32(imgui.Vec4{X: 1, Y: 1, Z: 1, W: 1}), 0, gui.Scaled(1.5))
 
+	return left, width
 }
 
 // swatchTexture is a palette uploaded for the interface to draw, uploaded the

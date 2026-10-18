@@ -59,7 +59,8 @@ beside it, a choice of its templates where it has more than one, and a slider
 from -100 to 100 around the middle; **Reset** sets one back. A hairstyle, a
 beard or a moustache is a template and the accessory of it the slider picks.
 The colours are picked from the palettes of the skin, the hair and the eyes,
-with the rectangles the ethnicity picks them from outlined. The search above
+with the rectangles the ethnicity picks them from outlined, or typed in
+beneath each as the place in the palette, across and down from 0 to 255. The search above
 the panel looks through every gene. A gene the creator has no name for, such
 as a mod's, is listed under **Other** by its key.
 
