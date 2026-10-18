@@ -224,7 +224,7 @@ func (a *App) frame() {
 	a.characterPanel()
 
 	a.settingsWindow()
-	a.aboutWindow()
+	a.aboutPopup()
 	a.problemsWindow()
 	a.welcomeWindow()
 	a.pickerWindow()

@@ -268,4 +268,7 @@ for makeappx and makepri; the Store signs what it publishes.
 MIT, see [LICENSE](LICENSE). The bundled fonts come with their own licences:
 Roboto under the SIL Open Font License (`assets/fonts/roboto/OFL.txt`) and
 Material Symbols under the Apache License 2.0
-(`assets/fonts/material-symbols/LICENSE.txt`).
+(`assets/fonts/material-symbols/LICENSE.txt`). The application icon is
+"design" by Resa Valen from
+[Noun Project](https://thenounproject.com/browse/icons/term/design/), licensed
+under CC BY 3.0. **Help > About** credits them all.

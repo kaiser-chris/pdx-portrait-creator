@@ -113,7 +113,7 @@ func (a *App) toFront() {
 		return
 	}
 
-	if a.state.showSettings || a.state.showAbout || a.state.showProblems {
+	if a.state.showSettings || a.state.showProblems {
 		return
 	}
 

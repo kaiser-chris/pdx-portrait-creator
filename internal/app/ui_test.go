@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AllenDang/cimgui-go/imgui"
+
 	"github.com/kaiser-chris/pdx-asset-go/render"
 	"github.com/kaiser-chris/pdx-parser-go/genes"
 
@@ -106,6 +108,41 @@ func TestSettingsWindowDraws(t *testing.T) {
 
 	if !application.state.showSettings {
 		t.Error("the settings window closed by itself")
+	}
+}
+
+// Help > About opens a window over everything else, which credits every work
+// the application uses, and Escape closes it again.
+func TestAboutWindow(t *testing.T) {
+	application, _ := startApp(t, "")
+	defer application.Close()
+
+	open := func() bool {
+		return imgui.IsPopupOpenStrV("", imgui.PopupFlagsAnyPopupId|imgui.PopupFlagsAnyPopupLevel)
+	}
+
+	application.state.showAbout = true
+	application.Step()
+	application.Step()
+
+	if _, ok := gui.FindWindow(popupAbout); !ok || !open() {
+		t.Fatal("Help > About opened no window")
+	}
+
+	for _, credit := range credits {
+		if credit.work == "" || credit.notice == "" || credit.url == "" {
+			t.Errorf("credit %+v leaves something out", credit)
+		}
+	}
+
+	io := imgui.CurrentIO()
+	io.AddKeyEvent(imgui.KeyEscape, true)
+	application.Step()
+	io.AddKeyEvent(imgui.KeyEscape, false)
+	application.Step()
+
+	if open() {
+		t.Error("the About window is still open after Escape")
 	}
 }
 

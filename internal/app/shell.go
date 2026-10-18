@@ -18,7 +18,6 @@ const (
 	panelCharacter = "Character"
 
 	windowSettings = "Settings"
-	windowAbout    = "About"
 	windowProblems = "Problems"
 )
 
@@ -209,8 +208,6 @@ func (a *App) closeFocusedWindow() {
 	switch a.state.focusedWindow {
 	case windowSettings:
 		a.state.showSettings = false
-	case windowAbout:
-		a.state.showAbout = false
 	case windowProblems:
 		a.state.showProblems = false
 	default:
@@ -220,27 +217,53 @@ func (a *App) closeFocusedWindow() {
 	a.state.focusedWindow = ""
 }
 
-func (a *App) aboutWindow() {
-	if !a.state.showAbout {
+// aboutPopup names the application and its version, says what it is and
+// what it is built with, and credits the works it uses. Help > About asks for
+// it by showAbout, and Close or Escape closes it again.
+func (a *App) aboutPopup() {
+	if a.state.showAbout {
+		a.state.showAbout = false
+		imgui.OpenPopupStr(popupAbout)
+	}
+
+	imgui.SetNextWindowSizeV(gui.ScaledVec2(460, 0), imgui.CondAlways)
+
+	if !imgui.BeginPopupModalV(popupAbout, nil, imgui.WindowFlagsNoResize|imgui.WindowFlagsNoSavedSettings) {
 		return
 	}
+	defer imgui.EndPopup()
 
-	imgui.SetNextWindowSizeV(gui.ScaledVec2(360, 0), imgui.CondAppearing)
+	gui.PushStrongFont()
+	imgui.TextUnformatted(applicationName + " " + applicationVersion)
+	gui.PopFont()
 
-	if imgui.BeginV(windowAbout, &a.state.showAbout, imgui.WindowFlagsNoDocking|imgui.WindowFlagsNoCollapse|imgui.WindowFlagsAlwaysAutoResize) {
-		a.trackFocus(windowAbout)
+	dimmedWrapped(aboutDescription)
 
-		gui.PushStrongFont()
-		imgui.Text(applicationName)
-		gui.PopFont()
+	imgui.Separator()
 
-		imgui.TextDisabled("Version " + applicationVersion)
+	dimmedWrapped("Rendered with raylib, interface built with Dear ImGui.")
+
+	gui.PushStrongFont()
+	imgui.SeparatorText("Credits")
+	gui.PopFont()
+
+	for _, credit := range credits {
+		credit.show()
 		imgui.Spacing()
-		imgui.TextWrapped("A character portrait editor for Paradox games.")
 	}
 
-	imgui.End()
+	imgui.Separator()
+
+	if imgui.Button("Close") || imgui.IsKeyPressedBool(imgui.KeyEscape) {
+		imgui.CloseCurrentPopup()
+	}
 }
+
+// aboutDescription says what the application is, under its name.
+const aboutDescription = "Character portrait editor for Victoria 3 and Europa Universalis 5 mods."
+
+// popupAbout is the title of the About window.
+const popupAbout = "About"
 
 // canStartOver reports whether the welcome screen can be opened again: once a
 // portrait is loaded, and while neither it nor the picker is open.
