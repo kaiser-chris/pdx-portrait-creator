@@ -18,6 +18,8 @@ github.com/kaiser-chris/pdx-asset-go v0.2.0 h1:TdAJdTFbsA1OhpkZHFIDjktwW/yJvjCcu
 github.com/kaiser-chris/pdx-asset-go v0.2.0/go.mod h1:qx4jISYlToSGmZm6tFEnvoZEKsAl2WQuzuStwaUlDTE=
 github.com/kaiser-chris/pdx-asset-go v0.3.0 h1:+ybQ2gPx7jrfFgK5UrnXcME5G09L67RB+jg7et/Ae9E=
 github.com/kaiser-chris/pdx-asset-go v0.3.0/go.mod h1:7MpdcsQwHZKzPuoHrQzWwJ6w0XSFUnSzcxFIWilgYgI=
+github.com/kaiser-chris/pdx-asset-go v0.3.1 h1:kE8cRHvaerML3huMv9In+kckCQ+BQ7ClrOhlmkH2UCQ=
+github.com/kaiser-chris/pdx-asset-go v0.3.1/go.mod h1:7MpdcsQwHZKzPuoHrQzWwJ6w0XSFUnSzcxFIWilgYgI=
 github.com/kaiser-chris/pdx-parser-go v0.4.0 h1:URqQUuq6P31fnwl3KugWWCgksxvn1kHyNwLYBPlDwgA=
 github.com/kaiser-chris/pdx-parser-go v0.4.0/go.mod h1:Lv0yJnWl+It4wmcRxp7UwEtbBlnHKgGdFu9OzMK1GsQ=
 github.com/kaiser-chris/pdx-parser-go v0.5.0 h1:lkTOnyCeWJrrsVdHmQ8ix/tzIc5qWGs/dPMG/jpvFeo=
