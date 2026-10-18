@@ -83,7 +83,13 @@ list beside the views, as the game does: the set gives the head and the
 torso a state each to start in, and their states go on from one animation to
 the next. The list holds every set and the variants it has for the
 portrait's sex, and **none** for the pose the meshes are stored in; the
-button beside it pauses the animation.
+button beside it pauses the animation. A variant that holds a prop, such as
+`saber_pop_idle` or `smoker_character_idle`, holds it as the game draws it.
+The variant names a portrait modifier of `gfx/portraits/portrait_modifiers`,
+which sets the `props` gene to a template, which picks an accessory. The
+accessory is hung from a joint, as a sabre is from the hand and a pipe from
+the lips, and moves with the animation. An accessory posed with the head is
+drawn as a part of it, as hair is.
 
 With **Highlight Areas** on, pointing at a gene or a category tints the part
 of the portrait it changes in light blue, the more the further it moves it,

@@ -778,3 +778,67 @@ func TestReferences(t *testing.T) {
 		t.Errorf("the second dialog opens at %q, want %q", asked.start, dir)
 	}
 }
+
+// An animation variant that holds a prop has it hung from its joint, a sabre
+// from the hand and a pipe from the lips, and the default of the set lets go
+// of it again.
+func TestAnimationProps(t *testing.T) {
+	game := os.Getenv("PDX_GAME_DIR")
+	if game == "" {
+		t.Skip("set PDX_GAME_DIR to the game folder to run this test")
+	}
+
+	application, _ := startApp(t, fmt.Sprintf(`{"Folders":[{"Name":"game","Path":%q}],"InterfaceScale":1}`, game))
+	defer application.Close()
+
+	waitForPortrait(t, application)
+	application.state.welcome = false
+
+	p := application.portrait
+	playing := &p.animation
+
+	settle := func() {
+		t.Helper()
+
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			application.Step()
+
+			if !p.rebuilding && !p.character.partsChanged && len(p.missingProps()) == 0 && len(p.props) == len(p.wantedProps) {
+				return
+			}
+		}
+
+		t.Fatal("the props were not read in time")
+	}
+
+	for _, test := range []struct{ variant, entity, joint string }{
+		{"saber_pop_idle", "prop_saber_entity", "bn_l_prop"},
+		{"smoker_character_idle", "", "bn_h_mouth_"},
+	} {
+		playing.chosen, playing.variant = "idle", test.variant
+		playing.restart(p.sex)
+		settle()
+
+		if len(p.props) != 1 {
+			t.Fatalf("%s holds %d props, want 1", test.variant, len(p.props))
+		}
+
+		prop := p.props[0]
+		if (test.entity != "" && prop.entity != test.entity) || !strings.HasPrefix(prop.joint, test.joint) || !prop.model.Hanging() {
+			t.Errorf("%s holds %s from %s, hanging %v; want %s from %s", test.variant, prop.entity, prop.joint, prop.model.Hanging(), test.entity, test.joint)
+		}
+
+		if models := p.models(); len(models) != 3 || models[2] != prop.model {
+			t.Errorf("%s: the portrait is drawn with %d models, want the prop among them", test.variant, len(models))
+		}
+	}
+
+	playing.variant = ""
+	playing.restart(p.sex)
+	settle()
+
+	if len(p.props) != 0 || len(p.models()) != 2 {
+		t.Errorf("the default of idle holds %d props", len(p.props))
+	}
+}

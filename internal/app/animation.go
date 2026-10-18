@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"slices"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -150,6 +151,36 @@ func (a *animating) restart(sex genes.Sex) {
 
 	a.body = states.New(a.bodyStates, pair.Torso, a.seed)
 	a.head = states.New(a.headStates, pair.Head, a.seed+1)
+}
+
+// modifiers are the portrait modifiers of the variant played for a sex, which
+// give it its props; the default of a set and none give it none.
+func (a *animating) modifiers(sex genes.Sex) []genes.ModifierChoice {
+	if a.none || a.variant == "" {
+		return nil
+	}
+
+	set, ok := a.sets.Get(a.chosen)
+	if !ok {
+		return nil
+	}
+
+	for _, variant := range set.For(sex).Variants {
+		if variant.Name == a.variant {
+			return variant.Modifiers
+		}
+	}
+
+	return nil
+}
+
+// key tells apart what is played for a sex, for knowing when it changed.
+func (a *animating) key(sex genes.Sex) string {
+	if a.none {
+		return "none"
+	}
+
+	return fmt.Sprintf("%s/%s/%s", a.chosen, a.variant, sex)
 }
 
 // pose moves the clock on by the time the last frame took and poses the body,

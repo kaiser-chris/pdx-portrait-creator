@@ -121,10 +121,20 @@ type portrait struct {
 	basis     basis
 
 	// parts are the entities the head is drawn with now, and rebuilding is
-	// set while the head is read again with other parts.
+	// set while the head is read again with other parts, or props are read.
 	parts      []string
 	rebuilding bool
 	heads      chan headResult
+
+	// modifiers are the portrait modifiers, which give an animation its
+	// props. propsFor is what is played that the props were worked out for,
+	// headProps the props posed with the head, wantedProps those hung from
+	// joints, and props those hung and uploaded; see props.go.
+	modifiers   database.Table[genes.ModifierGroup]
+	propsFor    string
+	headProps   []string
+	wantedProps []propSpec
+	props       []hungProp
 
 	// decalTextures are the textures the decals of the genes name, by their
 	// paths, and decalProblem why the decals could last not be laid, so that
@@ -227,6 +237,7 @@ type portraitResult struct {
 	ethnicities  database.Table[genes.Ethnicity]
 	characters   database.Table[genes.DNA]
 	accessories  database.Table[genes.Accessory]
+	modifiers    database.Table[genes.ModifierGroup]
 	palettes     map[string]*texture.Image
 	swatches     map[string]*image.RGBA
 	decals       map[string]*texture.Image
@@ -240,6 +251,7 @@ type headResult struct {
 	generation  int
 	head        *model.Model
 	parts       []string
+	props       []loadedProp
 	diagnostics report.Diagnostics
 	err         error
 }
@@ -343,6 +355,9 @@ func readPortrait(set *folders.Set, sex genes.Sex, dna *genes.DNA, from basis) p
 	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
 
 	result.accessories, diagnostics = genes.LoadAccessories(set)
+	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
+
+	result.modifiers, diagnostics = genes.LoadModifiers(set)
 	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
 
 	// A portrait started from scratch is the template ethnicity, every
@@ -563,6 +578,7 @@ func (p *portrait) poll() bool {
 
 		p.sex, p.loader, p.bodySource, p.parts = result.sex, result.loader, result.body, result.parts
 		p.genes, p.ethnicities, p.characters, p.accessories = result.genes, result.ethnicities, result.characters, result.accessories
+		p.modifiers = result.modifiers
 		p.palettes, p.swatches = result.palettes, result.swatches
 		p.decalTextures, p.decalProblem = result.decals, ""
 		p.basis = result.basis
@@ -613,22 +629,29 @@ func (p *portrait) pollHead() {
 			return
 		}
 
-		head, err := p.renderer.Upload(result.head)
-		if err != nil {
-			warn(err)
+		// A head that needed no reading again comes back as nil, with the
+		// props that did.
+		if result.head != nil {
+			head, err := p.renderer.Upload(result.head)
+			if err != nil {
+				warn(err)
 
-			return
+				return
+			}
+
+			p.head.Unload()
+			p.head, p.parts = head, result.parts
+			head.Follow(p.body, headLinks...)
+			p.animation.headChanged(result.head)
+			p.animation.restart(p.sex)
+
+			// The new head is morphed and has its decals laid like the old
+			// one.
+			p.character.changed = true
+			p.highlight.forget()
 		}
 
-		p.head.Unload()
-		p.head, p.parts = head, result.parts
-		head.Follow(p.body, headLinks...)
-		p.animation.headChanged(result.head)
-		p.animation.restart(p.sex)
-
-		// The new head is morphed and has its decals laid like the old one.
-		p.character.changed = true
-		p.highlight.forget()
+		p.takeProps(result.props)
 
 	default:
 	}
@@ -645,9 +668,17 @@ func (p *portrait) rebuildHead() {
 	p.character.partsChanged = false
 
 	parts, diagnostics := headParts(p.genes, p.accessories, p.character.dna(), p.sex)
+	parts = append(parts, p.headProps...)
 	p.diagnostics = append(p.diagnostics, diagnostics...)
 
-	if slices.Equal(parts, p.parts) {
+	// The props are read with the head, since the loader reads one thing at
+	// a time; props no longer wanted are let go of at once.
+	missing := p.missingProps()
+	needHead := !slices.Equal(parts, p.parts)
+
+	if !needHead && len(missing) == 0 {
+		p.takeProps(nil)
+
 		return
 	}
 
@@ -655,8 +686,26 @@ func (p *portrait) rebuildHead() {
 	generation, loader, sex, body := p.generation, p.loader, p.sex, p.bodySource
 
 	go func() {
-		head, diagnostics, err := buildHead(loader, sex, body, parts)
-		send(p.heads, headResult{generation: generation, head: head, parts: parts, diagnostics: diagnostics, err: err})
+		result := headResult{generation: generation, parts: parts}
+
+		if needHead {
+			result.head, result.diagnostics, result.err = buildHead(loader, sex, body, parts)
+		}
+
+		for _, prop := range missing {
+			read, diagnostics, err := loader.Load(prop.entity)
+			result.diagnostics = append(result.diagnostics, diagnostics...)
+
+			if err != nil {
+				result.diagnostics = append(result.diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "entity " + prop.entity, Message: err.Error() + "; drawn without it"})
+
+				continue
+			}
+
+			result.props = append(result.props, loadedProp{propSpec: prop, model: read})
+		}
+
+		send(p.heads, result)
 	}()
 }
 
@@ -773,6 +822,7 @@ func (p *portrait) draw() {
 		return
 	}
 
+	p.wantProps()
 	p.rebuildHead()
 
 	if p.character.coloursChanged {
@@ -802,7 +852,7 @@ func (p *portrait) draw() {
 	}
 
 	p.viewer.Look.Lighting = p.staging.lighting(p)
-	p.viewer.Draw(p.body, p.head)
+	p.viewer.Draw(p.models()...)
 }
 
 // layDecals lays the decals the genes lay at the portrait's age over the
@@ -823,6 +873,8 @@ func (p *portrait) layDecals() {
 }
 
 func (p *portrait) unloadModels() {
+	p.unloadProps()
+
 	for _, uploaded := range []*render.Model{p.body, p.head} {
 		if uploaded != nil {
 			uploaded.Unload()

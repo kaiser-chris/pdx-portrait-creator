@@ -16,10 +16,14 @@ github.com/jupiterrider/ffi v0.7.0 h1:RKsl6Ascal+3kyAqR5Qcbp83LceQMLc1VZbPfHWoNz
 github.com/jupiterrider/ffi v0.7.0/go.mod h1:9dauhpOfNqrqk28fxuu0kkdeFtT9Qr4vbfigiuIXN7c=
 github.com/kaiser-chris/pdx-asset-go v0.2.0 h1:TdAJdTFbsA1OhpkZHFIDjktwW/yJvjCcunp8Nwldz4c=
 github.com/kaiser-chris/pdx-asset-go v0.2.0/go.mod h1:qx4jISYlToSGmZm6tFEnvoZEKsAl2WQuzuStwaUlDTE=
+github.com/kaiser-chris/pdx-asset-go v0.3.0 h1:+ybQ2gPx7jrfFgK5UrnXcME5G09L67RB+jg7et/Ae9E=
+github.com/kaiser-chris/pdx-asset-go v0.3.0/go.mod h1:7MpdcsQwHZKzPuoHrQzWwJ6w0XSFUnSzcxFIWilgYgI=
 github.com/kaiser-chris/pdx-parser-go v0.4.0 h1:URqQUuq6P31fnwl3KugWWCgksxvn1kHyNwLYBPlDwgA=
 github.com/kaiser-chris/pdx-parser-go v0.4.0/go.mod h1:Lv0yJnWl+It4wmcRxp7UwEtbBlnHKgGdFu9OzMK1GsQ=
 github.com/kaiser-chris/pdx-parser-go v0.5.0 h1:lkTOnyCeWJrrsVdHmQ8ix/tzIc5qWGs/dPMG/jpvFeo=
 github.com/kaiser-chris/pdx-parser-go v0.5.0/go.mod h1:Lv0yJnWl+It4wmcRxp7UwEtbBlnHKgGdFu9OzMK1GsQ=
+github.com/kaiser-chris/pdx-parser-go v0.6.0 h1:ZQUu+QidBlabIN+LLN1l7IYwNQKRRBUfxThptu65GsE=
+github.com/kaiser-chris/pdx-parser-go v0.6.0/go.mod h1:Lv0yJnWl+It4wmcRxp7UwEtbBlnHKgGdFu9OzMK1GsQ=
 github.com/ncruces/zenity v0.10.15 h1:UaHekkxwt7QjoZmMWtzhqSEtQT97/Cux6FDBWwfyuqk=
 github.com/ncruces/zenity v0.10.15/go.mod h1:45d81tt+vF/UjBjlWE/vvE0oD0hWuHUQld4vPbA4VxE=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
