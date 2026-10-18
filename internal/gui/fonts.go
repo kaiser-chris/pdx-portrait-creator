@@ -58,6 +58,7 @@ const (
 	IconPause       = "\ue034" // pause
 	IconPlay        = "\ue037" // play_arrow
 	IconPerson      = "\uf0d3" // person
+	IconProps       = "\uf6ee" // eyeglasses
 	IconReset       = "\uf053" // restart_alt
 	IconSave        = "\ue161" // save
 	IconSaveAs      = "\ueb60" // save_as

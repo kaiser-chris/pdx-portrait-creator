@@ -53,11 +53,14 @@ be started, and the welcome screen says so.
 
 The **Character** panel lists the genes by category: the head, forehead and
 brows, eyes, nose, cheeks, mouth, jaw and chin, ears, neck and body, ageing
-and skin, hair and beard, and colours, with how many genes of each are changed
-from what the portrait started from. Each gene has a name to read, its key
-beside it, a choice of its templates where it has more than one, and a slider
-from -100 to 100 around the middle; **Reset** sets one back. A hairstyle, a
-beard or a moustache is a template and the accessory of it the slider picks.
+and skin, hair and beard, props, and colours, with how many genes of each are
+changed from what the portrait started from. Each gene has a name to read, its
+key beside it, a choice of its templates where it has more than one, and a
+slider from -100 to 100 around the middle; **Reset** sets one back. A
+hairstyle, a beard, a moustache or a prop is a template and the accessory of
+it the slider picks. A prop, such as glasses or a cane, is worn on the head
+or hangs from the hand it is held in, and an animation that holds a prop of
+its own holds it as well, as the game does.
 The colours are picked from the palettes of the skin, the hair and the eyes,
 with the rectangles the ethnicity picks them from outlined, or typed in
 beneath each as the place in the palette, across and down from 0 to 255. The search above

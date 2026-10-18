@@ -127,12 +127,13 @@ type portrait struct {
 	heads      chan headResult
 
 	// modifiers are the portrait modifiers, which give an animation its
-	// props. propsFor is what is played that the props were worked out for,
-	// headProps the props posed with the head, wantedProps those hung from
-	// joints, and props those hung and uploaded; see props.go.
+	// props. propsFor is what is played that played, the props of the
+	// animation, were worked out for; wantedProps are the props hung from
+	// joints the DNA and the animation give, and props those hung and
+	// uploaded; see props.go.
 	modifiers   database.Table[genes.ModifierGroup]
 	propsFor    string
-	headProps   []string
+	played      playedProps
 	wantedProps []propSpec
 	props       []hungProp
 
@@ -397,7 +398,9 @@ func readPortrait(set *folders.Set, sex genes.Sex, dna *genes.DNA, from basis) p
 	result.diagnostics = append(result.diagnostics, diagnostics...)
 	result.decals = decals
 
-	parts, diagnostics := headParts(result.genes, result.accessories, dna, sex)
+	// The props hung from joints are read once the portrait plays, with
+	// those of its animation; see props.go.
+	parts, _, diagnostics := accessoryParts(result.genes, result.accessories, dna, sex)
 	result.diagnostics = append(result.diagnostics, diagnostics...)
 
 	head, diagnostics, err := buildHead(loader, sex, body, parts)
@@ -426,17 +429,13 @@ func swatchOf(palette *texture.Image) *image.RGBA {
 	return swatch
 }
 
-// headParts are the entities the accessory genes of a DNA draw with the head,
-// posed as it is, in the order of the genes: the eyes, the teeth, the hair,
-// the beard. A gene that picks an accessory that draws nothing, such as no
-// hair, draws nothing; one that picks an accessory that is not there is
-// reported.
-func headParts(all *genes.Genes, accessories database.Table[genes.Accessory], dna *genes.DNA, sex genes.Sex) ([]string, report.Diagnostics) {
-	var (
-		parts       []string
-		diagnostics report.Diagnostics
-	)
-
+// accessoryParts are the entities the accessory genes of a DNA draw, in the
+// order of the genes: those posed with the head, as it is, such as the eyes,
+// the teeth, the hair and the beard; and those hung from a joint, such as a
+// cane the props gene puts in a hand. A gene that picks an accessory that
+// draws nothing, such as no hair, draws nothing; one that picks an accessory
+// that is not there is reported.
+func accessoryParts(all *genes.Genes, accessories database.Table[genes.Accessory], dna *genes.DNA, sex genes.Sex) (parts []string, hung []propSpec, diagnostics report.Diagnostics) {
 	for key, gene := range all.AccessoryGenes.All() {
 		if len(gene.Templates) == 0 {
 			continue
@@ -464,12 +463,16 @@ func headParts(all *genes.Genes, accessories database.Table[genes.Accessory], dn
 		}
 
 		chosen, ok := accessory.Choose(nil)
-		if ok && chosen.Entity != "" && chosen.SharedPoseEntity == headPose {
+		switch {
+		case !ok || chosen.Entity == "":
+		case chosen.Node != "":
+			hung = append(hung, propSpec{entity: chosen.Entity, joint: chosen.Node})
+		case chosen.SharedPoseEntity == headPose:
 			parts = append(parts, chosen.Entity)
 		}
 	}
 
-	return parts, diagnostics
+	return parts, hung, diagnostics
 }
 
 // buildHead reads the head of a sex, seats it on the body, and adds the parts
@@ -667,8 +670,20 @@ func (p *portrait) rebuildHead() {
 
 	p.character.partsChanged = false
 
-	parts, diagnostics := headParts(p.genes, p.accessories, p.character.dna(), p.sex)
-	parts = append(parts, p.headProps...)
+	// The props of the animation are held beside those of the DNA, as the
+	// game holds them: the DNA's are mostly glasses and the like.
+	played := p.played
+	parts, hung, diagnostics := accessoryParts(p.genes, p.accessories, p.character.dna(), p.sex)
+	parts = append(parts, played.head...)
+	p.wantedProps = nil
+
+	// A prop both give is held once.
+	for _, prop := range append(hung, played.hung...) {
+		if !slices.Contains(p.wantedProps, prop) {
+			p.wantedProps = append(p.wantedProps, prop)
+		}
+	}
+
 	p.diagnostics = append(p.diagnostics, diagnostics...)
 
 	// The props are read with the head, since the loader reads one thing at

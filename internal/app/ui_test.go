@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -840,5 +841,44 @@ func TestAnimationProps(t *testing.T) {
 
 	if len(p.props) != 0 || len(p.models()) != 2 {
 		t.Errorf("the default of idle holds %d props", len(p.props))
+	}
+
+	// The props gene is listed, and a cane picked in it is held from the
+	// right hand.
+	var prop *accessoryGene
+	for index := range p.character.accessories {
+		if p.character.accessories[index].gene.Key == "props" {
+			prop = &p.character.accessories[index]
+		}
+	}
+
+	if prop == nil || prop.hidden || categories[prop.category].id != "props" {
+		t.Fatalf("the props gene is %+v, want it listed under Props", prop)
+	}
+
+	prop.template = slices.IndexFunc(prop.templates, func(template genes.AccessoryTemplate) bool { return template.Name == "gene_walkingcane_01" })
+	prop.value = 255
+	p.character.partsChanged = true
+	settle()
+
+	if len(p.props) != 1 || p.props[0].entity != "prop_walkingcane_entity" || p.props[0].joint != "bn_r_prop" {
+		t.Errorf("a cane picked holds %+v, want the cane from the right hand", p.props)
+	}
+
+	// An animation's prop is held beside the one the DNA picks, as the game
+	// holds them.
+	playing.variant = "saber_pop_idle"
+	playing.restart(p.sex)
+	settle()
+
+	held := []string{}
+	for _, hung := range p.props {
+		held = append(held, hung.entity)
+	}
+
+	slices.Sort(held)
+
+	if !slices.Equal(held, []string{"prop_saber_entity", "prop_walkingcane_entity"}) || len(p.models()) != 4 {
+		t.Errorf("with a sabre played and a cane picked, the portrait holds %v, want both", held)
 	}
 }

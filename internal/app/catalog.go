@@ -164,6 +164,9 @@ var categories = []category{
 		{"beards", "Beard"},
 		{"mustaches", "Moustache"},
 	}},
+	{id: "props", icon: gui.IconProps, name: "Props", genes: []catalogued{
+		{"props", "Prop"},
+	}},
 	{id: categoryColours, icon: gui.IconColours, name: "Colours", genes: []catalogued{
 		{"skin_color", "Skin"},
 		{"hair_color", "Hair"},
@@ -174,10 +177,8 @@ var categories = []category{
 
 // hiddenGenes are genes of a DNA the character panel does not list: the
 // parts of the head, which have one template each and are not a choice, and
-// which the head is drawn with whatever they say; and the props a character
-// holds, a cane or a rifle, which hang from the hands of a pose the creator
-// does not play and are not drawn.
-var hiddenGenes = []string{"eye_accessory", "eye_lashes_accessory", "teeth_accessory", "props"}
+// which the head is drawn with whatever they say.
+var hiddenGenes = []string{"eye_accessory", "eye_lashes_accessory", "teeth_accessory"}
 
 // catalogue finds the category and the name of every gene the catalogue
 // knows, by its key.

@@ -58,14 +58,14 @@ animations_props = {
 		return choices
 	}
 
-	head, hung, diagnostics := propsOf(modifiers, all, accessories, choose("saber_attachment", "hat_attachment", "pipe_attachment", "nothing_attachment"), genes.Male)
+	played, diagnostics := propsOf(modifiers, all, accessories, choose("saber_attachment", "hat_attachment", "pipe_attachment", "nothing_attachment"), genes.Male)
 
-	if !slices.Equal(head, []string{"prop_top_hat_entity"}) {
-		t.Errorf("posed with the head: %v, want the top hat", head)
+	if !slices.Equal(played.head, []string{"prop_top_hat_entity"}) {
+		t.Errorf("posed with the head: %v, want the top hat", played.head)
 	}
 
-	if want := []propSpec{{entity: "prop_saber_entity", joint: "bn_l_prop"}, {entity: "prop_pipe_entity", joint: "bn_h_mouth_r_lowerLip"}}; !slices.Equal(hung, want) {
-		t.Errorf("hung: %v, want %v", hung, want)
+	if want := []propSpec{{entity: "prop_saber_entity", joint: "bn_l_prop"}, {entity: "prop_pipe_entity", joint: "bn_h_mouth_r_lowerLip"}}; !slices.Equal(played.hung, want) {
+		t.Errorf("hung: %v, want %v", played.hung, want)
 	}
 
 	if len(diagnostics) != 0 {
@@ -74,10 +74,10 @@ animations_props = {
 
 	// A prop posed with the torso, a missing template and a missing
 	// modifier are each reported, and drawn without.
-	head, hung, diagnostics = propsOf(modifiers, all, accessories, choose("apron_attachment", "broken_attachment", "lost_attachment"), genes.Male)
+	played, diagnostics = propsOf(modifiers, all, accessories, choose("apron_attachment", "broken_attachment", "lost_attachment"), genes.Male)
 
-	if len(head) != 0 || len(hung) != 0 || len(diagnostics) != 3 {
-		t.Fatalf("head %v, hung %v, diagnostics %v; want nothing, and three reasons", head, hung, diagnostics)
+	if len(played.head) != 0 || len(played.hung) != 0 || len(diagnostics) != 3 {
+		t.Fatalf("played %+v, diagnostics %v; want nothing, and three reasons", played, diagnostics)
 	}
 
 	for index, fragment := range []string{"posed with the torso", "no template gene_missing", "no portrait modifier lost_attachment"} {

@@ -43,11 +43,18 @@ type loadedProp struct {
 	model *model.Model
 }
 
+// playedProps are the props the animation played gives: the entities posed
+// with the head, and those hung from a joint.
+type playedProps struct {
+	head []string
+	hung []propSpec
+}
+
 // propsOf are the props the portrait modifiers of an animation variant give
-// a sex: the entities posed with the head, and those hung from a joint. A
-// modifier, gene, template or accessory that is not there, and a prop drawn
-// in a way the creator does not draw, are reported and left out.
-func propsOf(modifiers database.Table[genes.ModifierGroup], all *genes.Genes, accessories database.Table[genes.Accessory], choices []genes.ModifierChoice, sex genes.Sex) (head []string, hung []propSpec, diagnostics report.Diagnostics) {
+// a sex. A modifier, gene, template or accessory that is not there, and a
+// prop drawn in a way the creator does not draw, are reported and left out.
+func propsOf(modifiers database.Table[genes.ModifierGroup], all *genes.Genes, accessories database.Table[genes.Accessory], choices []genes.ModifierChoice, sex genes.Sex) (played playedProps, diagnostics report.Diagnostics) {
+
 	problem := func(subject, format string, args ...any) {
 		diagnostics = append(diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: subject, Message: fmt.Sprintf(format, args...) + "; drawn without it"})
 	}
@@ -99,16 +106,16 @@ func propsOf(modifiers database.Table[genes.ModifierGroup], all *genes.Genes, ac
 			case !ok || chosen.Entity == "":
 				continue
 			case chosen.Node != "":
-				hung = append(hung, propSpec{entity: chosen.Entity, joint: chosen.Node})
+				played.hung = append(played.hung, propSpec{entity: chosen.Entity, joint: chosen.Node})
 			case chosen.SharedPoseEntity == headPose:
-				head = append(head, chosen.Entity)
+				played.head = append(played.head, chosen.Entity)
 			default:
 				problem(subject, "%s is posed with the %s, which only the head's parts are", chosen.Entity, chosen.SharedPoseEntity)
 			}
 		}
 	}
 
-	return head, hung, diagnostics
+	return played, diagnostics
 }
 
 // propAccessory is the portrait accessory a modifier of an accessory gene
@@ -138,8 +145,8 @@ func propAccessory(all *genes.Genes, change genes.GeneModifier, sex genes.Sex) (
 }
 
 // wantProps works out the props of what the portrait plays, when that has
-// changed, and has the head read again with those posed with it, and the
-// props hung from joints read, by rebuildHead.
+// changed, and has rebuildHead draw them with those of the DNA: the head
+// read again with those posed with it, and those hung from joints read.
 func (p *portrait) wantProps() {
 	key := p.animation.key(p.sex)
 	if key == p.propsFor {
@@ -148,13 +155,11 @@ func (p *portrait) wantProps() {
 
 	p.propsFor = key
 
-	head, hung, diagnostics := propsOf(p.modifiers, p.genes, p.accessories, p.animation.modifiers(p.sex), p.sex)
+	played, diagnostics := propsOf(p.modifiers, p.genes, p.accessories, p.animation.modifiers(p.sex), p.sex)
 	p.diagnostics = append(p.diagnostics, diagnostics...)
 
-	if !slices.Equal(head, p.headProps) || !slices.Equal(hung, p.wantedProps) {
-		p.headProps, p.wantedProps = head, hung
-		p.character.partsChanged = true
-	}
+	p.played = played
+	p.character.partsChanged = true
 }
 
 // missingProps are the props hung from joints that are wanted and not hung
@@ -230,7 +235,7 @@ func (p *portrait) unloadProps() {
 		prop.model.Unload()
 	}
 
-	p.props, p.wantedProps, p.headProps, p.propsFor = nil, nil, nil, ""
+	p.props, p.wantedProps, p.played, p.propsFor = nil, nil, playedProps{}, ""
 }
 
 // models are the models the portrait is drawn with: the body, the head and

@@ -20,8 +20,8 @@ and download the font its src names. The names in it now:
 
     accessibility_new,add,add_circle,add_photo_alternate,air,animation,
     arrow_back,arrow_downward,arrow_forward,arrow_upward,boy,cake,category,
-    content_copy,content_cut,content_paste,delete,elderly,eyebrow,face,face_5,face_6,female,fingerprint,fit_screen,
-    girl,groups,hearing,highlight,info,light_mode,link,link_off,lips,logout,
+    content_copy,content_cut,content_paste,delete,elderly,eyebrow,eyeglasses,
+    face,face_5,face_6,female,fingerprint,fit_screen,girl,groups,hearing,highlight,info,light_mode,link,link_off,lips,logout,
     male,palette,pause,person,person_add,photo_camera,play_arrow,restart_alt,
     save,save_as,search,sentiment_satisfied,settings,visibility,warning,
     zoom_in,zoom_out
