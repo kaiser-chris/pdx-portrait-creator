@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"time"
 
 	"github.com/AllenDang/cimgui-go/imgui"
 
@@ -190,6 +191,7 @@ func openStore(dir string) (config.Store, error) {
 // viewport first, so the dock space that follows covers exactly what is left.
 func (a *App) frame() {
 	a.pollDialog()
+	a.expireError()
 
 	// Checked every frame so that "Automatic" follows the window from one
 	// monitor to another. Nothing happens unless the scale actually changes.
@@ -209,6 +211,7 @@ func (a *App) frame() {
 	a.problemsWindow()
 	a.welcomeWindow()
 	a.pickerWindow()
+	a.renamePopup()
 
 	a.handleShortcuts()
 }
@@ -224,6 +227,28 @@ func (a *App) trackFocus(title string) {
 // setStatus replaces the message shown in the status bar.
 func (a *App) setStatus(format string, args ...any) {
 	a.state.status = fmt.Sprintf(format, args...)
+	a.state.statusError = false
+	a.state.statusSince = time.Now()
+}
+
+// setError replaces the message shown in the status bar with one of
+// something that went wrong, which is drawn in red, and goes away after
+// errorShownFor, so that it is not taken for something still wrong long
+// after it was put right.
+func (a *App) setError(format string, args ...any) {
+	a.setStatus(format, args...)
+	a.state.statusError = true
+}
+
+// errorShownFor is how long the status bar shows an error.
+const errorShownFor = 10 * time.Second
+
+// expireError clears an error from the status bar once it has been shown
+// long enough.
+func (a *App) expireError() {
+	if a.state.statusError && time.Since(a.state.statusSince) >= errorShownFor {
+		a.state.status, a.state.statusError = "", false
+	}
 }
 
 func fileExists(path string) bool {

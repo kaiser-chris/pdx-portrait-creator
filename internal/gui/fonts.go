@@ -29,6 +29,7 @@ const (
 	IconCheeks      = "\ue813" // sentiment_satisfied
 	IconColours     = "\ue40a" // palette
 	IconCopy        = "\ue14d" // content_copy
+	IconDNA         = "\ue90d" // fingerprint
 	IconDelete      = "\ue92e" // delete
 	IconDown        = "\ue5db" // arrow_downward
 	IconEars        = "\ue023" // hearing
@@ -55,6 +56,8 @@ const (
 	IconPlay        = "\ue037" // play_arrow
 	IconPerson      = "\uf0d3" // person
 	IconReset       = "\uf053" // restart_alt
+	IconSave        = "\ue161" // save
+	IconSaveAs      = "\ueb60" // save_as
 	IconSearch      = "\uef7a" // search
 	IconSettings    = "\ue8b8" // settings
 	IconUp          = "\ue5d8" // arrow_upward

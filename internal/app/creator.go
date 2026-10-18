@@ -140,10 +140,25 @@ func (a *App) portraitBar() {
 	p := a.portrait
 	c := p.character
 
+	// The identifier the DNA is saved under, which a character's DNA starts
+	// with and an ethnicity or scratch starts without.
 	imgui.AlignTextToFramePadding()
-	imgui.TextDisabled("Based on")
+	imgui.TextUnformatted(gui.Iconed(gui.IconDNA, "DNA"))
 	imgui.SameLine()
-	imgui.TextUnformatted(p.basis.describe())
+	imgui.SetNextItemWidth(gui.Scaled(200))
+
+	alerted := a.identifierAlerted()
+	if alerted {
+		gui.PushErrorFrame()
+	}
+
+	imgui.InputTextWithHint("##identifier", "dna_identifier", &p.basis.identifier, 0, nil)
+
+	if alerted {
+		gui.PopErrorFrame()
+	}
+
+	imgui.SetItemTooltip(fmt.Sprintf("The key the DNA is saved under (Ctrl+S). Started from %s.", p.basis.describe()))
 	imgui.SameLine()
 
 	if imgui.Button(labelResetAll) {
@@ -151,7 +166,7 @@ func (a *App) portraitBar() {
 		p.highlight.forget()
 	}
 
-	imgui.SetItemTooltip("Set every gene back to what the portrait started from")
+	imgui.SetItemTooltip("Set every gene back to what the portrait started from: " + p.basis.describe())
 
 	imgui.SameLineV(0, gui.Scaled(24))
 

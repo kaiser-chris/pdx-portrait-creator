@@ -1,6 +1,10 @@
 package app
 
-import "github.com/kaiser-chris/pdx-portrait-creator/internal/config"
+import (
+	"time"
+
+	"github.com/kaiser-chris/pdx-portrait-creator/internal/config"
+)
 
 // folderEntry is one row of the settings window's folder table. The settings
 // window edits these copies and only writes them back when the user saves, so
@@ -38,8 +42,21 @@ type state struct {
 	// dialog is the file dialog that is open, if one is.
 	dialog *pendingDialog
 
-	// status is the message shown in the status bar.
-	status string
+	// renameAsked opens the question a DNA saved into its own file under a
+	// new identifier asks; see saving.go.
+	renameAsked bool
+
+	// status is the message shown in the status bar, statusError says it
+	// tells of something that went wrong, which it is drawn in red for, and
+	// statusSince is when it was set: an error goes away after a while.
+	status      string
+	statusError bool
+	statusSince time.Time
+
+	// identifierAlert is when a save was refused for the want of a good
+	// identifier, which the identifier field blinks in red for a while
+	// after; see saving.go.
+	identifierAlert time.Time
 
 	// welcome is set while the welcome screen is wanted, which it is when
 	// the application starts, and picker is the picker of a starting point.

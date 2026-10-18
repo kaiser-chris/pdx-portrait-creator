@@ -414,7 +414,13 @@ func (a *App) pick(key string) {
 		state.sex = genes.Boy
 	}
 
-	a.start(basis{kind: basisCharacter, key: key}, dna, state.sex)
+	from := basis{kind: basisCharacter, key: key, identifier: key}
+	if len(dna.Origins) > 0 {
+		origin := dna.Origins[0]
+		from.file = &dnaFile{path: origin.Path, source: origin.Source, key: key, original: dna}
+	}
+
+	a.start(from, dna, state.sex)
 }
 
 // pickerPreview is the portrait as it is drawn from what is picked, what it

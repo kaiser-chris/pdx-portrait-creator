@@ -168,6 +168,14 @@ type basis struct {
 	// template ethnicity's for a portrait started from scratch.
 	key       string
 	ethnicity *genes.Ethnicity
+
+	// identifier is the key the portrait's DNA is saved under, which the
+	// user can change: a character's own to start with, nothing for an
+	// ethnicity or scratch. file is where the DNA is kept, the file a
+	// character's was read from or the one it was saved to since, nil for a
+	// DNA that is in no file yet; see saving.go.
+	identifier string
+	file       *dnaFile
 }
 
 type basisKind int
@@ -338,7 +346,7 @@ func readPortrait(set *folders.Set, sex genes.Sex, dna *genes.DNA, from basis) p
 			result.diagnostics = append(result.diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "ethnicity " + templateEthnicity, Message: err.Error() + "; the portrait is neutral"})
 		}
 
-		result.basis = basis{kind: basisScratch, key: templateEthnicity, ethnicity: ethnicity}
+		result.basis.kind, result.basis.key, result.basis.ethnicity = basisScratch, templateEthnicity, ethnicity
 	}
 
 	if dna == nil {

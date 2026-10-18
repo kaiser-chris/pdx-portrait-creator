@@ -6,6 +6,15 @@ import (
 	"github.com/ncruces/zenity"
 )
 
+// fileFilter narrows a file dialog down to one kind of file.
+type fileFilter struct {
+	name     string
+	patterns []string
+}
+
+// dnaFiles are the script files DNA is kept in.
+var dnaFiles = fileFilter{name: "DNA script", patterns: []string{"*.txt"}}
+
 // fileRequest is what a dialog asks the user for.
 type fileRequest struct {
 	title string
@@ -15,6 +24,11 @@ type fileRequest struct {
 
 	// folder asks for a folder rather than a file.
 	folder bool
+
+	// save asks for a file to write, which may not exist yet, rather than
+	// one to read; filter narrows it down to one kind of file.
+	save   bool
+	filter fileFilter
 }
 
 // fileDialogs asks the user for somewhere to read or write. It returns an
@@ -43,9 +57,24 @@ func (d systemDialogs) choose(request fileRequest) (string, error) {
 
 	if request.folder {
 		options = append(options, zenity.Directory())
+	} else if len(request.filter.patterns) > 0 {
+		options = append(options, zenity.FileFilter{
+			Name:     request.filter.name,
+			Patterns: request.filter.patterns,
+			CaseFold: true,
+		})
 	}
 
-	path, err := zenity.SelectFile(options...)
+	var (
+		path string
+		err  error
+	)
+
+	if request.save {
+		path, err = zenity.SelectFileSave(options...)
+	} else {
+		path, err = zenity.SelectFile(options...)
+	}
 	if errors.Is(err, zenity.ErrCanceled) {
 		return "", nil
 	}

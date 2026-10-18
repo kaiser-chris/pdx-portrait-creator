@@ -78,6 +78,16 @@ func (a *App) menuBar() {
 
 		imgui.Separator()
 
+		if imgui.MenuItemBoolV(gui.Iconed(gui.IconSave, labelSave), "Ctrl+S", false, a.canSave()) {
+			a.save()
+		}
+
+		if imgui.MenuItemBoolV(gui.Iconed(gui.IconSaveAs, labelSaveToFile), "Ctrl+Shift+S", false, a.canSave()) {
+			a.saveToFile()
+		}
+
+		imgui.Separator()
+
 		if imgui.MenuItemBoolV(gui.Iconed(gui.IconExit, "Exit"), "Alt+F4", false, true) {
 			a.window.RequestClose()
 		}
@@ -113,7 +123,11 @@ func (a *App) statusBar() {
 
 	if imgui.InternalBeginViewportSideBar("##StatusBar", imgui.MainViewport(), imgui.DirDown, imgui.FrameHeight(), flags) {
 		if imgui.BeginMenuBar() {
-			imgui.TextUnformatted(a.state.status)
+			if a.state.statusError {
+				gui.ErrorText(a.state.status)
+			} else {
+				imgui.TextUnformatted(a.state.status)
+			}
 
 			right := fmt.Sprintf("%.0f FPS", imgui.CurrentIO().Framerate())
 
@@ -152,6 +166,14 @@ func (a *App) handleShortcuts() {
 
 	if io.KeyCtrl() && imgui.IsKeyPressedBool(imgui.KeyN) && a.canStartOver() {
 		a.startOver()
+	}
+
+	if io.KeyCtrl() && imgui.IsKeyPressedBool(imgui.KeyS) && a.canSave() {
+		if io.KeyShift() {
+			a.saveToFile()
+		} else {
+			a.save()
+		}
 	}
 
 	// Escape closes the window on top. While a text field is being edited Dear

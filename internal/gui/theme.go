@@ -146,3 +146,7 @@ func clearColor() color.RGBA {
 // colorWarning marks something the user should not overlook, such as edits
 // that have not been saved.
 var colorWarning = rgb(0xE0A948)
+
+// colorError marks what went wrong, or what has to be put right before
+// something can be done, such as a field left empty.
+var colorError = rgb(0xE05252)

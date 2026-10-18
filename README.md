@@ -4,8 +4,9 @@ A character portrait editor for Paradox games. It is being built step by step;
 for now it edits the portraits of Victoria 3 in 3D, read from the game folder
 configured in the settings: a man, a woman, a boy or a girl with their eyes,
 teeth, hair and beard, their skin, hair and eyes coloured from the game's
-palettes, and the head joined to the body the way the game joins them. Saving and exporting a
-portrait are not there yet.
+palettes, and the head joined to the body the way the game joins them, and
+saves them as the DNA of a character, which the game reads from
+`common/dna_data`.
 
 ## Starting a portrait
 
@@ -32,9 +33,9 @@ child of them. The picture shows the face or the whole figure.
 
 The portrait fills the window; the mouse turns it: drag to turn, drag with
 the right or the middle button to move the view along, scroll to zoom, double
-click to frame it again. Over it are what it started from, with **Reset All**
-back to that, its sex and its age, twenty-five to start with, and the views
-of the face and the whole figure.
+click to frame it again. Over it are the identifier its DNA is saved under,
+with **Reset All** back to what it started from, its sex and its age,
+twenty-five to start with, and the views of the face and the whole figure.
 
 The menu bar stays usable while the welcome screen or the picker is open,
 for the settings first of all: without a game folder configured, nothing can
@@ -82,6 +83,46 @@ status bar.
 
 It runs on Windows and Linux. On Linux its file dialogs need `zenity` or
 `kdialog`, one of which most desktops already have.
+
+## Saving
+
+A portrait is saved as the DNA of a character, under the identifier in the
+field at the top left, the way the files of `common/dna_data` define one:
+
+```
+dna_my_character = {
+    portrait_info = {
+        genes = {
+            hair_color = { 3 248 3 248 }
+            gene_cheek_fat = { "cheek_fat" 155 "cheek_fat" 139 }
+            ...
+        }
+    }
+    enabled = yes
+}
+```
+
+A portrait started from a character has its identifier to start with, and
+saves back into the file the character came from; one started from an
+ethnicity or from scratch has none, and is given one before it is saved:
+saving without one, or with one the game could not read, says so in red in
+the status bar for ten seconds and has the field blink red for a few.
+
+- **File > Save** (`Ctrl+S`) puts the DNA into the file it is kept in, in
+  place of the DNA it was read as, and leaves everything else in the file,
+  comments included, as it was. With its identifier changed since, it asks
+  whether to **Rename** the DNA it was read as or to **Add as New DNA**
+  beside it. A DNA in no file yet asks for a file, as Save To File does.
+- **File > Save To File...** (`Ctrl+Shift+S`) asks for a file, a new one or
+  one that holds DNA already: a DNA of the same identifier in it is
+  replaced where it stands, and anything else is added at its end. The
+  dialog opens at the file the DNA is kept in.
+
+The game's own files are not written over. With a mod configured after the
+game, a character of the game is saved into the mod, at the same place: the
+dialog opens at the file of the same name in the mod's `common/dna_data`,
+where its DNA overrides the game's. Its recessive alleles, and any gene the
+creator does not edit, are written as the game's file has them.
 
 ## Settings
 

@@ -20,10 +20,10 @@ and download the font its src names. The names in it now:
 
     accessibility_new,add,add_circle,air,animation,arrow_back,arrow_downward,
     arrow_forward,arrow_upward,boy,cake,category,content_copy,content_cut,
-    delete,elderly,eyebrow,face,face_5,face_6,female,girl,groups,hearing,
-    highlight,info,light_mode,link,link_off,lips,logout,male,palette,pause,
-    person,person_add,photo_camera,play_arrow,restart_alt,search,
-    sentiment_satisfied,settings,visibility,warning
+    delete,elderly,eyebrow,face,face_5,face_6,female,fingerprint,girl,groups,
+    hearing,highlight,info,light_mode,link,link_off,lips,logout,male,palette,
+    pause,person,person_add,photo_camera,play_arrow,restart_alt,save,save_as,
+    search,sentiment_satisfied,settings,visibility,warning
 
 The interface asks for an icon by its code point, which internal/gui/fonts.go
 names; the gallery gives the code point of each icon, and so does the list of
