@@ -47,6 +47,10 @@ type App struct {
 	// the pixels they were uploaded from; see swatchTexture.
 	swatchTextures map[*image.RGBA]imgui.TextureRef
 
+	// references are the pictures dropped onto the window to model a
+	// portrait on; see references.go.
+	references references
+
 	// dockWindowClass is handed to the dock space every frame. cimgui-go
 	// dereferences that argument even when it is nil, so one default instance
 	// is allocated for the lifetime of the application instead.
@@ -191,6 +195,8 @@ func openStore(dir string) (config.Store, error) {
 // viewport first, so the dock space that follows covers exactly what is left.
 func (a *App) frame() {
 	a.pollDialog()
+	a.pollDroppedFiles()
+	a.pollReferences()
 	a.expireError()
 
 	// Checked every frame so that "Automatic" follows the window from one
@@ -211,6 +217,7 @@ func (a *App) frame() {
 	a.problemsWindow()
 	a.welcomeWindow()
 	a.pickerWindow()
+	a.referenceWindows()
 	a.renamePopup()
 
 	a.handleShortcuts()

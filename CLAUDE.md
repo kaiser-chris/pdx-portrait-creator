@@ -24,11 +24,12 @@ anything that is not specific to this application there, and keep to its
 standards, which are those of pdx-parser-go plus GPU tests that check what is
 actually drawn.
 
-pdx-asset-go is not published yet, so this repository builds against the
-checkout next door through an ignored `go.work` (`go work init .
-../pdx-asset-go ../pdx-parser-go`), and go.mod does not require it until it is
-released. The workspace takes pdx-parser-go from next door too, for its
-`genes` package, which no release has yet.
+go.mod requires released versions of pdx-asset-go and pdx-parser-go, and the
+application builds with nothing else checked out. Working on a library and the
+application together goes through an ignored `go.work` (`go work init .
+../pdx-asset-go ../pdx-parser-go`); release the library with a new tag and
+require that version in go.mod before committing anything here that relies on
+it, and check with `GOWORK=off` that it builds without the workspace.
 
 ## Conventions
 

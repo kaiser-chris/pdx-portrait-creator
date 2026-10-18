@@ -5,8 +5,10 @@ go 1.26
 require (
 	github.com/AllenDang/cimgui-go v1.6.0
 	github.com/gen2brain/raylib-go/raylib v0.60.1
-	github.com/kaiser-chris/pdx-parser-go v0.3.0
+	github.com/kaiser-chris/pdx-asset-go v0.2.0
+	github.com/kaiser-chris/pdx-parser-go v0.4.0
 	github.com/ncruces/zenity v0.10.15
+	golang.org/x/image v0.44.0
 )
 
 require (
@@ -17,6 +19,5 @@ require (
 	github.com/jupiterrider/ffi v0.7.0 // indirect
 	github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7 // indirect
 	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect
-	golang.org/x/image v0.44.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 )

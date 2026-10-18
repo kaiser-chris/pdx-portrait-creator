@@ -78,6 +78,16 @@ With **Highlight Areas** on, pointing at a gene or a category tints the part
 of the portrait it changes in light blue, the more the further it moves it,
 and shows the portrait plain while a slider is dragged, to see the change.
 
+Pictures to model a portrait on, such as a photograph of the person it is
+of, are dropped onto the window: a PNG, JPEG, GIF, BMP, WebP or TIFF image
+opens in a window of its own, which floats over the portrait or docks beside
+it like any panel, and shows the picture as large as the window holds it.
+The buttons above the picture zoom in and out, as does the mouse wheel around
+the pointer, and fit it to the window again, as a double click does; zoomed
+in, the picture is dragged to move it. The zoom is a share of the size that
+fits the window, so a window made larger shows the same part of the picture,
+larger. Escape or the window's cross closes it again.
+
 **View > Problems** lists what could not be read, as does the count in the
 status bar.
 
@@ -181,14 +191,17 @@ binary.
 
 ### pdx-asset-go and pdx-parser-go
 
-pdx-asset-go is not released yet, and the genes the application reads are in
-no release of pdx-parser-go yet, so for now the application builds against
-checkouts of both next to this repository, through a Go workspace, which git
-ignores:
+The application depends on released versions of both, which go.mod names,
+and builds without anything else checked out. To work on one of them and the
+application together, check it out next to this repository and add a Go
+workspace, which git ignores:
 
 ```
 go work init . ../pdx-asset-go ../pdx-parser-go
 ```
+
+Release the library first, and require its new version in go.mod, before the
+application relies on what changed in it.
 
 ### Layout
 

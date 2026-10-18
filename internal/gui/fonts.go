@@ -37,6 +37,7 @@ const (
 	IconEyes        = "\ue8f4" // visibility
 	IconFace        = "\uf008" // face
 	IconFemale      = "\ue590" // female
+	IconFit         = "\uea10" // fit_screen
 	IconForward     = "\ue5c8" // arrow_forward
 	IconGirl        = "\ueb68" // girl
 	IconGroups      = "\uf233" // groups
@@ -62,6 +63,8 @@ const (
 	IconSettings    = "\ue8b8" // settings
 	IconUp          = "\ue5d8" // arrow_upward
 	IconWarning     = "\uf083" // warning
+	IconZoomIn      = "\ue8ff" // zoom_in
+	IconZoomOut     = "\ue900" // zoom_out
 )
 
 // Iconed is a label with an icon before it, as buttons and menu items are

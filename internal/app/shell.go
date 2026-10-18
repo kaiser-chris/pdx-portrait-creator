@@ -193,6 +193,8 @@ func (a *App) closeFocusedWindow() {
 		a.state.showAbout = false
 	case windowProblems:
 		a.state.showProblems = false
+	default:
+		a.closeReference(a.state.focusedWindow)
 	}
 
 	a.state.focusedWindow = ""

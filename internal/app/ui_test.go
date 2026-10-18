@@ -15,6 +15,8 @@ import (
 
 	"github.com/kaiser-chris/pdx-asset-go/render"
 	"github.com/kaiser-chris/pdx-parser-go/genes"
+
+	"github.com/kaiser-chris/pdx-portrait-creator/internal/gui"
 )
 
 // startApp runs the real application in a hidden window, with the settings
@@ -703,4 +705,49 @@ func animated(t *testing.T, application *App) {
 	playing.none = false
 	playing.restart(portrait.sex)
 	application.Step()
+}
+
+// Images dropped onto the window open as references in windows of their own,
+// a file that is no image is refused in red, and a closed window lets go of
+// its picture.
+func TestReferences(t *testing.T) {
+	application, _ := startApp(t, "")
+	defer application.Close()
+
+	dir := t.TempDir()
+	photo := filepath.Join(dir, "photo.png")
+	writeImage(t, photo, 64, 48)
+
+	application.dropFiles([]string{photo, photo, filepath.Join(dir, "notes.txt")})
+
+	if !application.state.statusError || !strings.Contains(application.state.status, "notes.txt") {
+		t.Errorf("status %q, want notes.txt refused in red", application.state.status)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for len(application.references.shown) < 2 && time.Now().Before(deadline) {
+		application.Step()
+	}
+
+	shown := application.references.shown
+	if len(shown) != 2 || shown[0].title() == shown[1].title() {
+		t.Fatalf("%d references, want the picture twice in windows of their own", len(shown))
+	}
+
+	application.Step()
+
+	if _, ok := gui.FindWindow(shown[0].title()); !ok {
+		t.Errorf("no window %q", shown[0].title())
+	}
+
+	// Escape closes the reference that was touched last, and it is let go of
+	// a frame later.
+	application.state.focusedWindow = shown[1].title()
+	application.closeFocusedWindow()
+	application.Step()
+	application.Step()
+
+	if len(application.references.shown) != 1 || application.references.shown[0] != shown[0] {
+		t.Errorf("after closing one, %d references are left", len(application.references.shown))
+	}
 }
