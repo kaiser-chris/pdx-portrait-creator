@@ -1,2 +1,6 @@
+// The application icon, the first icon group, which Explorer and the task bar
+// show for the executable.
+1 ICON "icon.ico"
+
 // The application manifest, as resource 1 of type 24 (RT_MANIFEST).
 1 24 "windows.manifest"

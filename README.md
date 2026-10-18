@@ -258,6 +258,11 @@ Releases are made by hand from the **Release** workflow in the Actions tab. It
 works out the next version from the latest release tag, builds and tests on
 Linux and Windows, tags the commit and publishes the builds.
 
+The Microsoft Store takes an MSIX package, which
+`packaging/msix/build-msix.ps1` packs from a release commit into `bin/msix`,
+with the manifest and tile images of that folder. It needs the Windows SDK
+for makeappx and makepri; the Store signs what it publishes.
+
 ## Licence
 
 MIT, see [LICENSE](LICENSE). The bundled fonts come with their own licences:

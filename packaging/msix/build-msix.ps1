@@ -70,9 +70,9 @@ try {
 
     New-Item -ItemType Directory -Force $layout | Out-Null
 
-    Write-Host "Building pdx-flag-builder $Version"
+    Write-Host "Building pdx-portrait-creator $Version"
     Invoke-Tool "go" @("build", "-trimpath", "-ldflags", "-s -w -H windowsgui",
-        "-o", (Join-Path $layout "pdx-flag-builder.exe"), ".\cmd\pdx-flag-builder")
+        "-o", (Join-Path $layout "pdx-portrait-creator.exe"), ".\cmd\pdx-portrait-creator")
 
     Copy-Item -Recurse "packaging\msix\Assets" (Join-Path $layout "Assets")
 
@@ -102,7 +102,7 @@ try {
     Invoke-Tool $makepri @("new", "/pr", $layout, "/cf", $config,
         "/mn", (Join-Path $layout "AppxManifest.xml"), "/of", (Join-Path $layout "resources.pri"), "/o")
 
-    $package = Join-Path $output "pdx-flag-builder_${Version}_x64.msix"
+    $package = Join-Path $output "pdx-portrait-creator_${Version}_x64.msix"
     Invoke-Tool $makeappx.FullName @("pack", "/d", $layout, "/p", $package, "/o")
 
     Write-Host "Packed $package"

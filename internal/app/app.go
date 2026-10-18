@@ -8,13 +8,16 @@
 package app
 
 import (
+	"bytes"
 	"fmt"
 	"image"
+	"image/png"
 	"os"
 	"time"
 
 	"github.com/AllenDang/cimgui-go/imgui"
 
+	"github.com/kaiser-chris/pdx-portrait-creator/assets"
 	"github.com/kaiser-chris/pdx-portrait-creator/internal/config"
 	"github.com/kaiser-chris/pdx-portrait-creator/internal/gui"
 )
@@ -107,6 +110,13 @@ func New(options Options) (*App, error) {
 
 	application.state.layoutBuilt = fileExists(store.LayoutPath())
 
+	// A window without its icon is still a window, so an icon that cannot be
+	// read is reported and the default one kept.
+	icon, err := png.Decode(bytes.NewReader(assets.Icon))
+	if err != nil {
+		warn(fmt.Errorf("decode the application icon: %w", err))
+	}
+
 	application.window = gui.NewWindow(gui.Config{
 		Title:      applicationName,
 		Width:      defaultWindowWidth,
@@ -114,6 +124,7 @@ func New(options Options) (*App, error) {
 		MinWidth:   minimumWindowWidth,
 		MinHeight:  minimumWindowHeight,
 		LayoutFile: store.LayoutPath(),
+		Icon:       icon,
 		Hidden:     options.Hidden,
 	})
 

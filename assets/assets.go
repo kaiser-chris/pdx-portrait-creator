@@ -4,6 +4,13 @@ package assets
 
 import _ "embed"
 
+// Icon is the application icon as a PNG image, shown in the title bar and the
+// task bar of the window. On Windows the executable carries it as well; see
+// internal/gui/resources.go.
+//
+//go:embed icon.png
+var Icon []byte
+
 // The interface fonts are embedded as strings rather than through an embed.FS
 // on purpose. Dear ImGui keeps the pointer to the font data for as long as its
 // atlas lives, because it rasterises glyphs on demand. A string declared with

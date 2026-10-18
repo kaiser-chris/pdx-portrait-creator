@@ -14,15 +14,15 @@
   IgnorableNamespaces="uap uap10 rescap">
 
   <Identity
-    Name="ChrisBahmutKaiser.PDXFlagBuilder"
+    Name="ChrisBahmutKaiser.PDXPortraitCreator"
     Publisher="CN=DF95829D-20FA-471F-BF70-6EE0E21C1083"
     Version="$VERSION$"
     ProcessorArchitecture="x64" />
 
   <Properties>
-    <DisplayName>PDX Flag Builder</DisplayName>
+    <DisplayName>PDX Portrait Creator</DisplayName>
     <PublisherDisplayName>Chris 'Bahmut' Kaiser</PublisherDisplayName>
-    <Description>PDX Flag Builder is a tool to build flags for Victoria 3 and Europa Universalis 5.</Description>
+    <Description>Character Portrait editor for Victoria 3 and Europa Universalis 5 mods.</Description>
     <Logo>Assets\StoreLogo.png</Logo>
     <uap10:PackageIntegrity>
       <uap10:Content Enforcement="on" />
@@ -44,17 +44,17 @@
     Package Support Framework offers.
   -->
   <Applications>
-    <Application Id="PDXFLAGBUILDER" Executable="pdx-flag-builder.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="PDXPORTRAITCREATOR" Executable="pdx-portrait-creator.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         BackgroundColor="transparent"
-        DisplayName="PDX Flag Builder"
-        Description="PDX Flag Builder"
-        Square150x150Logo="Assets\PDXFLAGBUILDER-Square150x150Logo.png"
-        Square44x44Logo="Assets\PDXFLAGBUILDER-Square44x44Logo.png">
+        DisplayName="PDX Portrait Creator"
+        Description="PDX Portrait Creator"
+        Square150x150Logo="Assets\PDXPORTRAITCREATOR-Square150x150Logo.png"
+        Square44x44Logo="Assets\PDXPORTRAITCREATOR-Square44x44Logo.png">
         <uap:DefaultTile
-          Wide310x150Logo="Assets\PDXFLAGBUILDER-Wide310x150Logo.png"
-          Square310x310Logo="Assets\PDXFLAGBUILDER-Square310x310Logo.png"
-          Square71x71Logo="Assets\PDXFLAGBUILDER-Square71x71Logo.png" />
+          Wide310x150Logo="Assets\PDXPORTRAITCREATOR-Wide310x150Logo.png"
+          Square310x310Logo="Assets\PDXPORTRAITCREATOR-Square310x310Logo.png"
+          Square71x71Logo="Assets\PDXPORTRAITCREATOR-Square71x71Logo.png" />
       </uap:VisualElements>
     </Application>
   </Applications>
