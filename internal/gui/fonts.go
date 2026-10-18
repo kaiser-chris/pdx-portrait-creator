@@ -54,6 +54,7 @@ const (
 	IconMouth       = "\ueeb2" // lips
 	IconNewPortrait = "\uea4d" // person_add
 	IconNose        = "\uefd8" // air
+	IconPaste       = "\ue14f" // content_paste
 	IconPause       = "\ue034" // pause
 	IconPlay        = "\ue037" // play_arrow
 	IconPerson      = "\uf0d3" // person

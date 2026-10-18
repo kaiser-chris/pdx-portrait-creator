@@ -3,6 +3,7 @@
 package app
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -186,6 +187,9 @@ func TestSavingDNA(t *testing.T) {
 	// Saved again into its own file, it takes its own place, and what was
 	// written around it by hand stays.
 	contents, _ := os.ReadFile(target)
+	// The comment goes after the byte order mark a new file starts with,
+	// which belongs at the very start.
+	contents = bytes.TrimPrefix(contents, []byte(string(rune(0xFEFF))))
 	if err := os.WriteFile(target, append([]byte("# kept by hand\n"), contents...), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -197,6 +201,20 @@ func TestSavingDNA(t *testing.T) {
 	text, saved := readDNAFile(t, target)
 	if written, _ := saved["dna_abraham_lincoln"].Gene("gene_nose_size"); written.Dominant.Value != 30 || !strings.HasPrefix(text, "# kept by hand") || strings.Count(text, "dna_abraham_lincoln =") != 1 {
 		t.Errorf("saved again:\n%s", text)
+	}
+
+	// Each save puts the DNA string on the line above the definition, and
+	// leaves the strings of earlier saves above it.
+	before, _, _ := strings.Cut(text, "dna_abraham_lincoln = {")
+	comments := strings.Split(strings.TrimSpace(before), "\n")
+
+	if len(comments) != 3 || !strings.HasPrefix(comments[1], "# ") || !strings.HasPrefix(comments[2], "# ") || comments[1] == comments[2] {
+		t.Fatalf("above the definition:\n%s\nwant the comment kept by hand and the strings of two saves", before)
+	}
+
+	fromString, problems := p.genes.ReadString(strings.TrimPrefix(comments[2], "# "))
+	if nose, _ := fromString.Gene("gene_nose_size"); len(problems) > 0 || nose.Dominant.Value != 30 {
+		t.Errorf("the string above the definition reads as a nose of %+v, %v; want 30", nose, problems)
 	}
 
 	// Under a new identifier, saving asks what to do with the DNA it came
@@ -232,8 +250,39 @@ func TestSavingDNA(t *testing.T) {
 	application.copyScript()
 
 	copied := rl.GetClipboardText()
-	if text, _ := readDNAFile(t, target); !strings.Contains(text, copied) || !strings.HasPrefix(copied, "dna_abraham_lincoln_young = {") {
+	if text, _ := readDNAFile(t, target); !strings.Contains(text, copied) || !strings.Contains(copied, "\ndna_abraham_lincoln_young = {") {
 		t.Errorf("copied:\n%s\nwhich the file does not hold as it was saved", copied)
+	}
+
+	// The welcome screen finds each of the three on the clipboard; started
+	// from the persistent DNA, the portrait is as it was and has its key.
+	if found := readPasted(copied, p.genes); found.kind != pastedDefinition || found.key != "dna_abraham_lincoln_young" {
+		t.Errorf("the script is found as %+v", found)
+	}
+
+	application.copyDNAString()
+
+	if found := readPasted(rl.GetClipboardText(), p.genes); found.kind != pastedString || !found.usable() {
+		t.Errorf("the DNA string is found as %+v", found)
+	}
+
+	application.copyPersistentDNA()
+
+	found := readPasted(rl.GetClipboardText(), p.genes)
+	if found.kind != pastedPersistent || found.key != "dna_abraham_lincoln_young" || found.dna.Sex != p.sex.String() {
+		t.Fatalf("the persistent DNA is found as %+v", found)
+	}
+
+	application.state.clipboard = clipboardState{}
+	application.fromClipboard()
+	application.Step()
+
+	if p.basis.kind != basisClipboard || p.basis.identifier != "dna_abraham_lincoln_young" || p.basis.file != nil {
+		t.Errorf("started from the clipboard, the basis is %+v", p.basis)
+	}
+
+	if nose := morphOf(t, p.character, "gene_nose_size"); nose.value != 30 {
+		t.Errorf("started from the clipboard, the nose is %v, want 30", nose.value)
 	}
 
 	// The picker lists what was saved.

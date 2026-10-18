@@ -63,6 +63,10 @@ type state struct {
 	welcome bool
 	picker  picker
 
+	// clipboard is the DNA the welcome screen last found on the clipboard;
+	// see clipboard.go.
+	clipboard clipboardState
+
 	// category is the position of the category the character panel lists,
 	// and geneSearch what it searches every gene for instead.
 	category   int

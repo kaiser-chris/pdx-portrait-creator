@@ -184,6 +184,7 @@ const (
 	basisScratch basisKind = iota
 	basisEthnicity
 	basisCharacter
+	basisClipboard
 )
 
 // describe is what the portrait shows of a basis: what it is and the key the
@@ -195,6 +196,12 @@ func (b basis) describe() string {
 		return "Ethnicity " + b.key
 	case basisCharacter:
 		return b.key
+	case basisClipboard:
+		if b.key == "" {
+			return "a DNA string from the clipboard"
+		}
+
+		return b.key + " from the clipboard"
 	default:
 		return "Scratch"
 	}

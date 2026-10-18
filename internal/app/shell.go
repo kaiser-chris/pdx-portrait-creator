@@ -92,6 +92,14 @@ func (a *App) menuBar() {
 			a.copyScript()
 		}
 
+		if imgui.MenuItemBoolV(gui.Iconed(gui.IconCopy, labelCopyString), "", false, a.canSave()) {
+			a.copyDNAString()
+		}
+
+		if imgui.MenuItemBoolV(gui.Iconed(gui.IconCopy, labelCopyPersistent), "", false, a.canSave()) {
+			a.copyPersistentDNA()
+		}
+
 		imgui.Separator()
 
 		if imgui.MenuItemBoolV(gui.Iconed(gui.IconExit, "Exit"), "Alt+F4", false, true) {

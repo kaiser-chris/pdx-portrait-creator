@@ -12,8 +12,10 @@ import (
 	imgui "github.com/AllenDang/cimgui-go/imgui"
 	rl "github.com/gen2brain/raylib-go/raylib"
 
+	"github.com/kaiser-chris/pdx-parser-go/database"
 	"github.com/kaiser-chris/pdx-parser-go/folders"
 	"github.com/kaiser-chris/pdx-parser-go/genes"
+	"github.com/kaiser-chris/pdx-parser-go/report"
 	"github.com/kaiser-chris/pdx-parser-go/script"
 
 	"github.com/kaiser-chris/pdx-portrait-creator/internal/gui"
@@ -22,12 +24,14 @@ import (
 // Labels of the File menu's save actions and of the question a renamed DNA
 // asks.
 const (
-	labelSave       = "Save"
-	labelSaveToFile = "Save To File..."
-	labelCopyScript = "Copy Script"
-	labelRenameDNA  = "Rename"
-	labelAddNewDNA  = "Add as New DNA"
-	labelCancelSave = "Cancel"
+	labelSave           = "Save"
+	labelSaveToFile     = "Save To File..."
+	labelCopyScript     = "Copy Script"
+	labelCopyString     = "Copy DNA String"
+	labelCopyPersistent = "Copy Persistent DNA"
+	labelRenameDNA      = "Rename"
+	labelAddNewDNA      = "Add as New DNA"
+	labelCancelSave     = "Cancel"
 
 	popupRename = "Save Under a New Name"
 )
@@ -139,7 +143,7 @@ func (a *App) writeDNA(path, replace string) {
 
 	dna := a.exportDNA()
 
-	merged, replaced, err := script.PutDefinition(string(existing), replace, identifier, genes.WriteDNA(identifier, dna, "\n"))
+	merged, replaced, err := script.PutDefinition(string(existing), replace, identifier, a.definition(identifier, dna))
 	if err != nil {
 		a.saveFailed(identifier, err)
 
@@ -173,8 +177,61 @@ func (a *App) copyScript() {
 
 	identifier := a.portrait.basis.identifier
 
-	rl.SetClipboardText(genes.WriteDNA(identifier, a.exportDNA(), "\n"))
+	rl.SetClipboardText(a.definition(identifier, a.exportDNA()))
 	a.setStatus("Copied the script of %s", identifier)
+}
+
+// copyDNAString puts the portrait's DNA on the clipboard as a DNA string. It
+// needs no identifier, since a string names nothing.
+func (a *App) copyDNAString() {
+	if !a.canSave() {
+		return
+	}
+
+	rl.SetClipboardText(a.dnaString(a.exportDNA()))
+	a.setStatus("Copied the DNA string")
+}
+
+// copyPersistentDNA puts the portrait's DNA on the clipboard as the game
+// writes it out, with the sex and age it is shown at.
+func (a *App) copyPersistentDNA() {
+	if !a.canSave() || !a.checkIdentifier() {
+		return
+	}
+
+	p := a.portrait
+	identifier := p.basis.identifier
+
+	dna := a.exportDNA()
+	dna.Sex = p.sex.String()
+	dna.Age = database.Some(p.character.at())
+
+	rl.SetClipboardText(genes.WritePersistentDNA(identifier, dna, "\n"))
+	a.setStatus("Copied the persistent DNA of %s", identifier)
+}
+
+// definition is a DNA as a definition of common/dna_data, with its DNA string
+// in a comment on the line above, as the game's own files have it.
+//
+// The string is only written, never read back: a DNA saved again into its
+// file is given a new comment above it, and the comments of earlier saves
+// stay where they were, a history of what the DNA was.
+func (a *App) definition(identifier string, dna *genes.DNA) string {
+	return "# " + a.dnaString(dna) + "\n" + genes.WriteDNA(identifier, dna, "\n")
+}
+
+// dnaString is a DNA as a DNA string of the genes the portrait was read
+// with.
+func (a *App) dnaString(dna *genes.DNA) string {
+	text, problems := a.portrait.genes.WriteString(dna)
+
+	// A gene the DNA does not give, or one the string has no place for, is
+	// no reason not to write it; the string just holds what it can.
+	for _, problem := range problems.Filter(report.SeverityWarning) {
+		warn(errors.New(problem.String()))
+	}
+
+	return text
 }
 
 func (a *App) saveFailed(identifier string, err error) {

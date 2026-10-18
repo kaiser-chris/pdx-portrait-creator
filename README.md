@@ -21,6 +21,16 @@ Portrait** (`Ctrl+N`) asks again:
   middle.
 - **From a Character** is the DNA of one of the characters of
   `common/dna_data`, as the game writes it.
+- **From the Clipboard** is a DNA copied from anywhere, written in any of the
+  game's three ways: a definition as `common/dna_data` holds one, the
+  persistent DNA the game writes out, or a DNA string. The button says
+  which is on the clipboard and, for a definition or persistent DNA, its
+  key, which the portrait keeps as its identifier. A persistent DNA also
+  gives its sex and age. Comments are left alone, as the game leaves them,
+  so a whole file copied is read for the DNA it defines, not for a DNA
+  string in a comment above it. The button cannot be used while the
+  clipboard holds no DNA, or a DNA string with a different number of genes
+  from the game, which reads as the wrong genes.
 
 The picker lists ethnicities and characters by the keys the game defines them
 under, such as `dna_abraham_lincoln`, since the files give them no other
@@ -129,6 +139,22 @@ the status bar for ten seconds and has the field blink red for a few.
   dialog opens at the file the DNA is kept in.
 - **File > Copy Script** puts the DNA on the clipboard as a file would hold
   it, to paste wherever it is wanted.
+- **File > Copy DNA String** puts it on the clipboard as a DNA string, and
+  **File > Copy Persistent DNA** as the persistent DNA the game writes out,
+  with the sex and age the portrait is shown at.
+
+A saved or copied DNA has its DNA string on the line above it, in a comment,
+as the game's own files have it:
+
+```
+# z78g+0cGKAYrmni4AAAAfACIAKEAWgB3AH8AdQCAAIAAiwCLAIgAdgBnAHsAegBbAGkAjAC...
+dna_my_character = {
+```
+
+The string is never read back. A DNA saved again gets a new string above
+it, and the strings of earlier saves stay above that, as a history of the
+DNA. A DNA string holds only the genes, in the order the game defines them,
+so it can only be read with the same genes it was written with.
 
 The game's own files are not written over. With a mod configured after the
 game, a character of the game is saved into the mod, at the same place: the

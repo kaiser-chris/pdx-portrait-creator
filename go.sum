@@ -18,6 +18,8 @@ github.com/kaiser-chris/pdx-asset-go v0.2.0 h1:TdAJdTFbsA1OhpkZHFIDjktwW/yJvjCcu
 github.com/kaiser-chris/pdx-asset-go v0.2.0/go.mod h1:qx4jISYlToSGmZm6tFEnvoZEKsAl2WQuzuStwaUlDTE=
 github.com/kaiser-chris/pdx-parser-go v0.4.0 h1:URqQUuq6P31fnwl3KugWWCgksxvn1kHyNwLYBPlDwgA=
 github.com/kaiser-chris/pdx-parser-go v0.4.0/go.mod h1:Lv0yJnWl+It4wmcRxp7UwEtbBlnHKgGdFu9OzMK1GsQ=
+github.com/kaiser-chris/pdx-parser-go v0.5.0 h1:lkTOnyCeWJrrsVdHmQ8ix/tzIc5qWGs/dPMG/jpvFeo=
+github.com/kaiser-chris/pdx-parser-go v0.5.0/go.mod h1:Lv0yJnWl+It4wmcRxp7UwEtbBlnHKgGdFu9OzMK1GsQ=
 github.com/ncruces/zenity v0.10.15 h1:UaHekkxwt7QjoZmMWtzhqSEtQT97/Cux6FDBWwfyuqk=
 github.com/ncruces/zenity v0.10.15/go.mod h1:45d81tt+vF/UjBjlWE/vvE0oD0hWuHUQld4vPbA4VxE=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

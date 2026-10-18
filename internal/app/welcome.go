@@ -32,7 +32,7 @@ const coverShade = 0.55
 
 // The sizes of the welcome screen and the picker, unscaled.
 const (
-	welcomeWidth  = 860
+	welcomeWidth  = 1080
 	choiceHeight  = 150
 	pickerWidth   = 1040
 	pickerHeight  = 680
@@ -153,7 +153,7 @@ func (a *App) welcomeWindow() {
 	imgui.Dummy(gui.ScaledVec2(0, 8))
 
 	spacing := imgui.CurrentStyle().ItemSpacing().X
-	width := (imgui.ContentRegionAvail().X - spacing*2) / 3
+	width := (imgui.ContentRegionAvail().X - spacing*3) / 4
 
 	imgui.BeginDisabledV(!ready)
 
@@ -182,6 +182,24 @@ func (a *App) welcomeWindow() {
 	if choice(gui.Iconed(gui.IconPerson, "From a Character"), fmt.Sprintf("One of the %d characters in common/dna_data, with their exact DNA.", characters), width) {
 		a.openPicker(pickCharacters)
 	}
+
+	imgui.SameLine()
+
+	// The clipboard is read only once the genes are, which tell whether a
+	// DNA string on it is one of this game's.
+	var found pasted
+	if ready {
+		found = a.pollClipboard()
+	}
+
+	imgui.BeginDisabledV(!found.usable())
+
+	if choice(gui.Iconed(gui.IconPaste, "From the Clipboard"), found.describe(), width) {
+		a.state.welcome = false
+		a.fromClipboard()
+	}
+
+	imgui.EndDisabled()
 
 	imgui.EndDisabled()
 
@@ -403,16 +421,7 @@ func (a *App) pick(key string) {
 		return
 	}
 
-	switch dna.Sex {
-	case "female":
-		state.sex = genes.Female
-	case "male":
-		state.sex = genes.Male
-	case "girl":
-		state.sex = genes.Girl
-	case "boy":
-		state.sex = genes.Boy
-	}
+	state.sex = sexOf(dna.Sex, state.sex)
 
 	from := basis{kind: basisCharacter, key: key, identifier: key}
 	if len(dna.Origins) > 0 {
