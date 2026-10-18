@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	rl "github.com/gen2brain/raylib-go/raylib"
+
 	"github.com/kaiser-chris/pdx-parser-go/folders"
 	"github.com/kaiser-chris/pdx-parser-go/genes"
 	"github.com/kaiser-chris/pdx-parser-go/report"
@@ -221,6 +223,17 @@ func TestSavingDNA(t *testing.T) {
 
 	if _, saved := readDNAFile(t, target); saved["dna_abraham_lincoln_old"] != nil || saved["dna_abraham_lincoln_young"] == nil || saved["dna_abraham_lincoln"] == nil {
 		t.Errorf("renamed, the file defines %v, want dna_abraham_lincoln and dna_abraham_lincoln_young", keys(saved))
+	}
+
+	// Copy Script puts the same DNA on the clipboard, as the file has it.
+	previous := rl.GetClipboardText()
+	t.Cleanup(func() { rl.SetClipboardText(previous) })
+
+	application.copyScript()
+
+	copied := rl.GetClipboardText()
+	if text, _ := readDNAFile(t, target); !strings.Contains(text, copied) || !strings.HasPrefix(copied, "dna_abraham_lincoln_young = {") {
+		t.Errorf("copied:\n%s\nwhich the file does not hold as it was saved", copied)
 	}
 
 	// The picker lists what was saved.

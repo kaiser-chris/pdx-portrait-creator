@@ -88,6 +88,12 @@ func (a *App) menuBar() {
 
 		imgui.Separator()
 
+		if imgui.MenuItemBoolV(gui.Iconed(gui.IconCopy, labelCopyScript), "", false, a.canSave()) {
+			a.copyScript()
+		}
+
+		imgui.Separator()
+
 		if imgui.MenuItemBoolV(gui.Iconed(gui.IconExit, "Exit"), "Alt+F4", false, true) {
 			a.window.RequestClose()
 		}
@@ -96,6 +102,12 @@ func (a *App) menuBar() {
 	}
 
 	if imgui.BeginMenu("View") {
+		if imgui.MenuItemBoolV(gui.Iconed(gui.IconAddPhoto, labelOpenReference), "", false, a.editing()) {
+			a.openReference()
+		}
+
+		imgui.Separator()
+
 		imgui.MenuItemBoolPtr(gui.Iconed(gui.IconWarning, "Problems"), "", &a.state.showProblems)
 
 		imgui.EndMenu()

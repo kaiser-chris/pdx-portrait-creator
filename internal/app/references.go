@@ -79,6 +79,43 @@ type references struct {
 	shown   []*reference
 	next    int
 	decoded chan decodedReference
+
+	// folder is where the last reference opened from the menu was, where the
+	// next one is likely to be as well.
+	folder string
+}
+
+// labelOpenReference is the View menu's item that opens a reference.
+const labelOpenReference = "Open Reference..."
+
+// referenceFiles narrows the dialog of Open Reference down to the images that
+// open as references.
+var referenceFiles = fileFilter{name: "Image", patterns: referencePatterns()}
+
+func referencePatterns() []string {
+	patterns := make([]string, len(referenceExtensions))
+	for i, extension := range referenceExtensions {
+		patterns[i] = "*" + extension
+	}
+
+	return patterns
+}
+
+// openReference asks for an image file and opens it as a reference, as if it
+// had been dropped onto the window.
+func (a *App) openReference() {
+	request := fileRequest{
+		title:  "Open Reference",
+		start:  a.references.folder,
+		filter: referenceFiles,
+	}
+
+	a.ask(request, func(path string) {
+		// A trailing separator has the dialog open in the folder rather
+		// than take its name for a file's.
+		a.references.folder = filepath.Dir(path) + string(filepath.Separator)
+		a.dropFiles([]string{path})
+	})
 }
 
 // isReference reports whether a file is an image that opens as a reference,

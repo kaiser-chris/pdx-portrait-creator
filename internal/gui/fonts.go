@@ -17,6 +17,7 @@ const interfaceFontSize = 16
 const (
 	IconAdd         = "\ue145" // add
 	IconAddCircle   = "\ue990" // add_circle
+	IconAddPhoto    = "\ue43e" // add_photo_alternate
 	IconAge         = "\ue7e9" // cake
 	IconAgeing      = "\uf21a" // elderly
 	IconAnimation   = "\ue71c" // animation

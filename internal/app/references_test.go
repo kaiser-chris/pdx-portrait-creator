@@ -2,10 +2,10 @@ package app
 
 import (
 	"image"
-	"math"
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"

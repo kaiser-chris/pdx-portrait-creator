@@ -750,4 +750,31 @@ func TestReferences(t *testing.T) {
 	if len(application.references.shown) != 1 || application.references.shown[0] != shown[0] {
 		t.Errorf("after closing one, %d references are left", len(application.references.shown))
 	}
+
+	// View > Open Reference asks for an image and opens it as a dropped one
+	// is opened, and the next time asks in the same folder.
+	dialogs := &fakeDialogs{answers: []string{photo}}
+	application.dialogs = dialogs
+
+	application.openReference()
+	answerDialog(t, application)
+
+	for len(application.references.shown) < 2 && time.Now().Before(deadline) {
+		application.Step()
+	}
+
+	if len(application.references.shown) != 2 {
+		t.Errorf("%d references after opening one, want 2", len(application.references.shown))
+	}
+
+	if asked := dialogs.lastAsked(); asked.save || len(asked.filter.patterns) != len(referenceExtensions) {
+		t.Errorf("the dialog asked %+v, want an image to open", asked)
+	}
+
+	application.openReference()
+	answerDialog(t, application)
+
+	if asked := dialogs.lastAsked(); filepath.Clean(asked.start) != dir {
+		t.Errorf("the second dialog opens at %q, want %q", asked.start, dir)
+	}
 }

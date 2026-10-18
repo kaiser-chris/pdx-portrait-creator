@@ -79,8 +79,8 @@ of the portrait it changes in light blue, the more the further it moves it,
 and shows the portrait plain while a slider is dragged, to see the change.
 
 Pictures to model a portrait on, such as a photograph of the person it is
-of, are dropped onto the window: a PNG, JPEG, GIF, BMP, WebP or TIFF image
-opens in a window of its own, which floats over the portrait or docks beside
+of, are dropped onto the window or picked with **View > Open Reference...**:
+a PNG, JPEG, GIF, BMP, WebP or TIFF image opens in a window of its own, which floats over the portrait or docks beside
 it like any panel, and shows the picture as large as the window holds it.
 The buttons above the picture zoom in and out, as does the mouse wheel around
 the pointer, and fit it to the window again, as a double click does; zoomed
@@ -127,6 +127,8 @@ the status bar for ten seconds and has the field blink red for a few.
   one that holds DNA already: a DNA of the same identifier in it is
   replaced where it stands, and anything else is added at its end. The
   dialog opens at the file the DNA is kept in.
+- **File > Copy Script** puts the DNA on the clipboard as a file would hold
+  it, to paste wherever it is wanted.
 
 The game's own files are not written over. With a mod configured after the
 game, a character of the game is saved into the mod, at the same place: the

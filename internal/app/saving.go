@@ -10,6 +10,7 @@ import (
 	"time"
 
 	imgui "github.com/AllenDang/cimgui-go/imgui"
+	rl "github.com/gen2brain/raylib-go/raylib"
 
 	"github.com/kaiser-chris/pdx-parser-go/folders"
 	"github.com/kaiser-chris/pdx-parser-go/genes"
@@ -23,6 +24,7 @@ import (
 const (
 	labelSave       = "Save"
 	labelSaveToFile = "Save To File..."
+	labelCopyScript = "Copy Script"
 	labelRenameDNA  = "Rename"
 	labelAddNewDNA  = "Add as New DNA"
 	labelCancelSave = "Cancel"
@@ -50,6 +52,12 @@ type dnaFile struct {
 
 // canSave reports whether there is a portrait to save.
 func (a *App) canSave() bool {
+	return a.editing()
+}
+
+// editing reports whether the editor is open on a portrait, past the welcome
+// screen and with no file dialog over it.
+func (a *App) editing() bool {
 	p := a.portrait
 
 	return p != nil && p.loaded() && !a.state.welcome && a.state.dialog == nil
@@ -153,6 +161,20 @@ func (a *App) writeDNA(path, replace string) {
 
 	a.setStatus("%s %s to %s", verb, identifier, filepath.Base(path))
 	a.reloadCharacters()
+}
+
+// copyScript puts the portrait's DNA on the clipboard as a file of
+// common/dna_data would define it, to paste into a file by hand or into one
+// the creator does not write, such as one open in an editor.
+func (a *App) copyScript() {
+	if !a.canSave() || !a.checkIdentifier() {
+		return
+	}
+
+	identifier := a.portrait.basis.identifier
+
+	rl.SetClipboardText(genes.WriteDNA(identifier, a.exportDNA(), "\n"))
+	a.setStatus("Copied the script of %s", identifier)
 }
 
 func (a *App) saveFailed(identifier string, err error) {
