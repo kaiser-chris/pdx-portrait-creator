@@ -446,17 +446,14 @@ func (a *App) morphRow(morph *morphGene, changed, searching bool) {
 	geneHeading(morph.name, morph.gene.Key, morph.drawn, morph.category, searching)
 
 	if len(morph.gene.Templates) > 1 {
-		imgui.SetNextItemWidth(-1)
+		names := make([]string, len(morph.gene.Templates))
+		for position, template := range morph.gene.Templates {
+			names[position] = template.Name
+		}
 
-		if imgui.BeginCombo("##template", friendly(morph.gene.Templates[morph.template].Name)) {
-			for position, template := range morph.gene.Templates {
-				if imgui.SelectableBoolV(friendly(template.Name), position == morph.template, 0, imgui.Vec2{}) && position != morph.template {
-					morph.template = position
-					c.changed = true
-				}
-			}
-
-			imgui.EndCombo()
+		if picked, ok := a.templateCombo(names, morph.template); ok {
+			morph.template = picked
+			c.changed = true
 		}
 	}
 
@@ -486,6 +483,86 @@ func (a *App) morphRow(morph *morphGene, changed, searching bool) {
 	imgui.PopID()
 }
 
+// templateCombo is the list of a gene's templates to pick one of, by the
+// names the game's files give them, with a search above it: a gene such as
+// the hairstyles has dozens. It reports the position of the template picked,
+// when another is.
+//
+// Only one list is open at a time, so they share the one search, which is
+// emptied and takes the keyboard each time a list opens.
+func (a *App) templateCombo(names []string, current int) (int, bool) {
+	imgui.SetNextItemWidth(-1)
+
+	if !imgui.BeginComboV("##template", names[current], imgui.ComboFlagsHeightLarge) {
+		return 0, false
+	}
+	defer imgui.EndCombo()
+
+	if imgui.IsWindowAppearing() {
+		a.state.templateSearch = ""
+		imgui.SetKeyboardFocusHere()
+	}
+
+	imgui.SetNextItemWidth(-1)
+	entered := imgui.InputTextWithHint("##search", gui.Iconed(gui.IconSearch, "Search"), &a.state.templateSearch, imgui.InputTextFlagsEnterReturnsTrue, nil)
+
+	shown := matching(names, a.state.templateSearch)
+
+	// Enter takes the first template found.
+	if entered && len(shown) > 0 {
+		imgui.CloseCurrentPopup()
+
+		return shown[0], shown[0] != current
+	}
+
+	if len(shown) == 0 {
+		imgui.TextDisabled("No template matches")
+
+		return 0, false
+	}
+
+	// The templates scroll beneath the search, which stays where it is.
+	appearing := imgui.IsWindowAppearing()
+	rows := min(len(shown), templateRows)
+
+	imgui.BeginChildStrV("##templates", imgui.Vec2{Y: float32(rows) * imgui.TextLineHeightWithSpacing()}, 0, 0)
+	defer imgui.EndChild()
+
+	picked, ok := 0, false
+
+	for _, position := range shown {
+		if imgui.SelectableBoolV(names[position], position == current, 0, imgui.Vec2{}) && position != current {
+			picked, ok = position, true
+			imgui.CloseCurrentPopup()
+		}
+
+		if position == current && appearing {
+			imgui.SetScrollHereY()
+		}
+	}
+
+	return picked, ok
+}
+
+// templateRows is how many templates the list shows before it scrolls.
+const templateRows = 16
+
+// matching are the positions of the names that hold a search, whatever their
+// case, in order; all of them for an empty search.
+func matching(names []string, search string) []int {
+	search = strings.ToLower(strings.TrimSpace(search))
+
+	var found []int
+
+	for position, name := range names {
+		if search == "" || strings.Contains(strings.ToLower(name), search) {
+			found = append(found, position)
+		}
+	}
+
+	return found
+}
+
 // signed shows a gene's strength from -100 to 100 around the middle of its
 // values, as the slider's label. It holds no verb of a format, so the slider
 // shows it as it is.
@@ -508,22 +585,19 @@ func (a *App) accessoryRow(accessory *accessoryGene, changed, searching bool) {
 
 	geneHeading(accessory.name, accessory.gene.Key, true, accessory.category, searching)
 
-	imgui.SetNextItemWidth(-1)
+	names := make([]string, len(accessory.templates))
+	for position, template := range accessory.templates {
+		names[position] = template.Name
+	}
 
-	if imgui.BeginCombo("##template", friendly(accessory.templates[accessory.template].Name)) {
-		for position, template := range accessory.templates {
-			if imgui.SelectableBoolV(friendly(template.Name), position == accessory.template, 0, imgui.Vec2{}) && position != accessory.template {
-				accessory.template = position
-				c.partsChanged = true
-			}
-		}
-
-		imgui.EndCombo()
+	if picked, ok := a.templateCombo(names, accessory.template); ok {
+		accessory.template = picked
+		c.partsChanged = true
 	}
 
 	label := "Nothing"
 	if picked, ok := c.picked(accessory); ok && picked != emptyAccessory {
-		label = friendly(picked)
+		label = picked
 	}
 
 	imgui.SetNextItemWidth(sliderWidth())

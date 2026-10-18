@@ -72,6 +72,10 @@ type state struct {
 	category   int
 	geneSearch string
 
+	// templateSearch is what the list of templates open searches for; see
+	// templateCombo.
+	templateSearch string
+
 	// showProblems shows the window of what went wrong reading the portrait.
 	showProblems bool
 }

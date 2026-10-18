@@ -224,10 +224,11 @@ func otherCategory() int {
 	return len(categories) - 1
 }
 
-// friendly turns a key of the game's files, such as the name of a template
-// or an accessory, into words to show: european_hairstyles becomes European
-// Hairstyles. The games' keys are lower case words joined by underscores,
-// which says enough of them to read.
+// friendly turns a key of the game's files into words to show:
+// european_hairstyles becomes European Hairstyles. The games' keys are lower
+// case words joined by underscores, which says enough of them to read. The
+// templates and accessories of genes are shown by their keys instead, as the
+// files that are edited by hand name them.
 func friendly(key string) string {
 	words := strings.FieldsFunc(key, func(r rune) bool { return r == '_' || r == ' ' })
 

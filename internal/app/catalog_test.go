@@ -1,6 +1,9 @@
 package app
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // Every gene the catalogue knows is in one category, under a name of its
 // own there, and Other and Colours are where the panel expects them.
@@ -57,6 +60,28 @@ func TestSigned(t *testing.T) {
 	for value, want := range map[int32]string{0: "-100", 127: "0", 128: "0", 140: "+10", 255: "+100"} {
 		if got := signed(value); got != want {
 			t.Errorf("signed(%d) = %q, want %q", value, got, want)
+		}
+	}
+}
+
+// The search of a list of templates finds them by any part of the names the
+// game gives them, whatever the case, and an empty one finds them all.
+func TestMatching(t *testing.T) {
+	names := []string{"no_hairstyles", "arabic_hairstyles", "european_hairstyles", "Arabian_test"}
+
+	for _, test := range []struct {
+		search string
+		want   []int
+	}{
+		{"", []int{0, 1, 2, 3}},
+		{"  ", []int{0, 1, 2, 3}},
+		{"arab", []int{1, 3}},
+		{"EURO", []int{2}},
+		{"styles", []int{0, 1, 2}},
+		{"nothing", nil},
+	} {
+		if got := matching(names, test.search); !slices.Equal(got, test.want) {
+			t.Errorf("matching %q = %v, want %v", test.search, got, test.want)
 		}
 	}
 }

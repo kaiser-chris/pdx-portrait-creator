@@ -55,7 +55,8 @@ The **Character** panel lists the genes by category: the head, forehead and
 brows, eyes, nose, cheeks, mouth, jaw and chin, ears, neck and body, ageing
 and skin, hair and beard, props, and colours, with how many genes of each are
 changed from what the portrait started from. Each gene has a name to read, its
-key beside it, a choice of its templates where it has more than one, and a
+key beside it, a choice of its templates where it has more than one, by the
+names the game's files give them and with a search at the top, and a
 slider from -100 to 100 around the middle; **Reset** sets one back. A
 hairstyle, a beard, a moustache or a prop is a template and the accessory of
 it the slider picks. A prop, such as glasses or a cane, is worn on the head
