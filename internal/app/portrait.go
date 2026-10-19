@@ -31,6 +31,13 @@ var faceJoints = []string{"bn_h_head", "Head_B"}
 // the rings where they meet lie at the same places to a hundredth of that.
 const seamTolerance = 0.01
 
+// weldTolerance is how far the ring of the head may lie from the body's for
+// its vertices to be welded to the body's nearest, in centimetres: Europa
+// Universalis 5's rings lie up to half of one apart, a woman's head from her
+// body and a man's head from the body of a boy, whose vertices are a little
+// more than one apart, which this stays short of half of.
+const weldTolerance = 0.5
+
 // headPose is the entity the parts of the head are posed with, as the
 // portrait accessories name it: the eyes, the teeth, the hair and the beard.
 const headPose = "head"
@@ -575,7 +582,7 @@ func (p *portrait) poll() bool {
 		// meets the body is drawn where the body's is, which its own blend
 		// shapes and bones would part from it.
 		head.Follow(body, result.assembly.links()...)
-		head.Weld(body, seamTolerance)
+		head.Weld(body, weldTolerance)
 
 		p.sex, p.loader, p.bodySource, p.parts = result.sex, result.loader, result.body, result.parts
 		p.assembly = result.assembly
@@ -645,7 +652,7 @@ func (p *portrait) pollHead() {
 			p.head.Unload()
 			p.head, p.parts = head, result.parts
 			head.Follow(p.body, p.assembly.links()...)
-			head.Weld(p.body, seamTolerance)
+			head.Weld(p.body, weldTolerance)
 			p.animation.headChanged(result.head)
 			p.animation.restart(p.sex)
 
