@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 
@@ -79,6 +80,8 @@ var categories = []category{
 		{"expressions_forehead", "Forehead Expression"},
 	}},
 	{id: "eyes", icon: gui.IconEyes, name: "Eyes", genes: []catalogued{
+		{"eye_accessory", "Eye Type"},
+		{"eyes", "Eye Type"},
 		{"gene_eye_size", "Eye Size"},
 		{"gene_eye_distance", "Eye Spacing"},
 		{"gene_eye_spacing", "Eye Spacing"},
@@ -97,6 +100,7 @@ var categories = []category{
 		{"gene_eye_corner_def", "Corner Definition"},
 		{"gene_eye_corner_depth_min", "Inner Corner Depth"},
 		{"eyelashes", "Eyelashes"},
+		{"eye_lashes_accessory", "Eyelashes"},
 		{"gene_eyelashes", "Eyeliner"},
 		{"expressions_eyes", "Eye Expression"},
 	}},
@@ -132,6 +136,8 @@ var categories = []category{
 		{"gene_cheek_def", "Cheek Definition"},
 	}},
 	{id: "mouth", icon: gui.IconMouth, name: "Mouth", genes: []catalogued{
+		{"teeth_accessory", "Teeth"},
+		{"mouth_inside", "Teeth"},
 		{"gene_mouth_width", "Mouth Width"},
 		{"gene_mouth_height", "Mouth Height"},
 		{"gene_mouth_forward", "Projection"},
@@ -228,10 +234,32 @@ var categories = []category{
 	{id: categoryOther, icon: gui.IconCategory, name: "Other"},
 }
 
-// hiddenGenes are genes of a DNA the character panel does not list: the
-// parts of the head, whose templates draw the same part, so are not a
-// choice, and which the head is drawn with whatever they say.
-var hiddenGenes = []string{"eye_accessory", "eye_lashes_accessory", "teeth_accessory", "eyes", "mouth_inside"}
+// headParts are the genes of the parts of the head: the eyes, the eyelashes
+// and the teeth. The games give most of them a single template, or several
+// that draw the same part, as Europa Universalis 5's eyes do for its dark and
+// light eyes; the head is drawn with whatever they say. The character panel
+// lists one only where its templates are a choice, as when a mod adds eyes
+// of its own.
+var headParts = []string{"eye_accessory", "eye_lashes_accessory", "teeth_accessory", "eyes", "mouth_inside"}
+
+// hiddenPart reports whether an accessory gene is a part of the head whose
+// templates all draw the same, for every sex, so that there is nothing to
+// choose.
+func hiddenPart(gene *genes.AccessoryGene) bool {
+	if !slices.Contains(headParts, gene.Key) {
+		return false
+	}
+
+	for _, template := range gene.Templates[min(1, len(gene.Templates)):] {
+		for sex := genes.Male; sex <= genes.Girl; sex++ {
+			if !slices.Equal(template.For(sex).Choices, gene.Templates[0].For(sex).Choices) {
+				return false
+			}
+		}
+	}
+
+	return true
+}
 
 // clothing reports whether an accessory gene is one of the clothes the game
 // dresses a character in itself, such as headwear or clothes: a gene of the

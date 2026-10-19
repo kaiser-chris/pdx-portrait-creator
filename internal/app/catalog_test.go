@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/kaiser-chris/pdx-parser-go/database"
 	"github.com/kaiser-chris/pdx-parser-go/genes"
 )
 
@@ -19,6 +20,9 @@ var alike = map[string]string{
 	"gene_aging_forehead":      "gene_old_forehead",
 	"gene_aging_mouth":         "gene_old_mouth",
 	"hair_styles":              "hairstyles",
+	"eyes":                     "eye_accessory",
+	"eyelashes":                "eye_lashes_accessory",
+	"mouth_inside":             "teeth_accessory",
 }
 
 // Every gene the catalogue knows is in one category, under a name of its
@@ -156,6 +160,50 @@ func TestIdleReason(t *testing.T) {
 	} {
 		if got := idleReason(gene(test.morph), genes.Male); got != test.want {
 			t.Errorf("%+v: %q, want %q", test.morph, got, test.want)
+		}
+	}
+}
+
+// A part of the head is listed only where its templates are a choice: the
+// game's single eyes, or Europa Universalis 5's dark and light eyes that draw
+// the same, are not; eyes a mod adds beside them are.
+func TestHiddenParts(t *testing.T) {
+	template := func(name string, entities ...string) genes.AccessoryTemplate {
+		made := genes.AccessoryTemplate{Name: name}
+
+		for sex := genes.Male; sex <= genes.Girl; sex++ {
+			for _, entity := range entities {
+				made.Sexes[sex].Choices = append(made.Sexes[sex].Choices, genes.Choice{Weight: 1, Accessory: entity})
+			}
+		}
+
+		return made
+	}
+
+	for _, test := range []struct {
+		name string
+		gene genes.AccessoryGene
+		want bool
+	}{
+		{"one template", genes.AccessoryGene{Definition: database.Definition{Key: "eye_accessory"}, Templates: []genes.AccessoryTemplate{
+			template("normal_eyes", "male_eyes_normal"),
+		}}, true},
+		{"templates drawing the same", genes.AccessoryGene{Definition: database.Definition{Key: "eyes"}, Templates: []genes.AccessoryTemplate{
+			template("all_eyes", "male_eyes"), template("dark_eyes", "male_eyes"), template("light_eyes", "male_eyes"),
+		}}, true},
+		{"eyes of a mod", genes.AccessoryGene{Definition: database.Definition{Key: "eye_accessory"}, Templates: []genes.AccessoryTemplate{
+			template("normal_eyes", "male_eyes_normal"), template("golden_eyes", "male_eyes_golden"),
+		}}, false},
+		{"no eyes", genes.AccessoryGene{Definition: database.Definition{Key: "eye_accessory"}, Templates: []genes.AccessoryTemplate{
+			template("normal_eyes", "male_eyes_normal"), template("no_eyes"),
+		}}, false},
+		{"not a part of the head", genes.AccessoryGene{Definition: database.Definition{Key: "hairstyles"}, Templates: []genes.AccessoryTemplate{
+			template("bald"),
+		}}, false},
+		{"no templates", genes.AccessoryGene{Definition: database.Definition{Key: "teeth_accessory"}}, true},
+	} {
+		if got := hiddenPart(&test.gene); got != test.want {
+			t.Errorf("%s: hidden %v, want %v", test.name, got, test.want)
 		}
 	}
 }

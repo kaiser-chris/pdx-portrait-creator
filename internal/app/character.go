@@ -142,7 +142,7 @@ func newCharacter(all *genes.Genes, sex genes.Sex, dna *genes.DNA, drawable []st
 			templates: byIndex(gene.Templates),
 			category:  category,
 			name:      name,
-			hidden:    slices.Contains(hiddenGenes, gene.Key) || clothing(all, gene.Key),
+			hidden:    hiddenPart(gene) || clothing(all, gene.Key),
 		})
 	}
 
