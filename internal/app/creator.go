@@ -261,6 +261,18 @@ func (a *App) characterPanel() {
 	p := a.portrait
 	changed, counts := p.character.changes()
 
+	// A category the game has no gene of is not listed, so it is not shown
+	// either: the first that is takes its place.
+	if !p.character.lists(a.state.category) {
+		for index := range categories {
+			if p.character.lists(index) {
+				a.state.category = index
+
+				break
+			}
+		}
+	}
+
 	imgui.SetNextItemWidth(-1)
 	imgui.InputTextWithHint("##search", gui.Iconed(gui.IconSearch, fmt.Sprintf("Search all %d genes", p.character.listed())), &a.state.geneSearch, 0, nil)
 
@@ -369,14 +381,15 @@ func (a *App) geneList(changed map[string]bool) {
 	}
 }
 
-// geneHeading is the name of a gene, dimmed for one that draws nothing yet,
-// with the category it is in while searching, and its key to the right.
-func geneHeading(name, key string, drawn bool, category int, searching bool) {
-	if drawn {
+// geneHeading is the name of a gene, dimmed for one that draws nothing,
+// which idle says the reason of, with the category it is in while searching,
+// and its key to the right.
+func geneHeading(name, key, idle string, category int, searching bool) {
+	if idle == "" {
 		imgui.TextUnformatted(name)
 	} else {
 		imgui.TextDisabled(name)
-		imgui.SetItemTooltip("Changes nothing drawn yet: a texture")
+		imgui.SetItemTooltip(idle)
 	}
 
 	if searching {
@@ -443,7 +456,7 @@ func (a *App) morphRow(morph *morphGene, changed, searching bool) {
 	imgui.PushIDStr(morph.gene.Key)
 	imgui.BeginGroup()
 
-	geneHeading(morph.name, morph.gene.Key, morph.drawn, morph.category, searching)
+	geneHeading(morph.name, morph.gene.Key, morph.idle, morph.category, searching)
 
 	if len(morph.gene.Templates) > 1 {
 		names := make([]string, len(morph.gene.Templates))
@@ -583,7 +596,7 @@ func (a *App) accessoryRow(accessory *accessoryGene, changed, searching bool) {
 	imgui.PushIDStr(accessory.gene.Key)
 	imgui.BeginGroup()
 
-	geneHeading(accessory.name, accessory.gene.Key, true, accessory.category, searching)
+	geneHeading(accessory.name, accessory.gene.Key, "", accessory.category, searching)
 
 	names := make([]string, len(accessory.templates))
 	for position, template := range accessory.templates {
@@ -632,7 +645,7 @@ func (a *App) colourList(changed map[string]bool) {
 
 		imgui.PushIDStr(colour.gene.Key)
 
-		geneHeading(colour.name, colour.gene.Key, true, colour.category, false)
+		geneHeading(colour.name, colour.gene.Key, "", colour.category, false)
 
 		swatch := p.swatches[what]
 		if swatch == nil {

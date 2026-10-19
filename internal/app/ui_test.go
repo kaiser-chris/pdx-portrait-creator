@@ -425,8 +425,8 @@ func stagedInEnvironments(t *testing.T, application *App) {
 	portrait := application.portrait
 	staging := &portrait.staging
 
-	if staging.environment != defaultEnvironment || len(staging.cameraKeys()) == 0 {
-		t.Fatalf("environment %q, %d cameras; want %s and the game's cameras", staging.environment, len(staging.cameraKeys()), defaultEnvironment)
+	if staging.environment != staging.grading.defaultEnvironment || len(staging.cameraKeys()) == 0 {
+		t.Fatalf("environment %q, %d cameras; want %s and the game's cameras", staging.environment, len(staging.cameraKeys()), staging.grading.defaultEnvironment)
 	}
 
 	// The cubemap is read off the thread that draws.
@@ -473,7 +473,7 @@ func stagedInEnvironments(t *testing.T, application *App) {
 		t.Errorf("camera_body sees %v degrees, want its 20", fov)
 	}
 
-	staging.environment, staging.camera = defaultEnvironment, ""
+	staging.environment, staging.camera = staging.grading.defaultEnvironment, ""
 	portrait.animation.paused = false
 	portrait.frame()
 	application.Step()

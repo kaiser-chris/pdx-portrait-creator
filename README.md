@@ -1,12 +1,13 @@
 # PDX Portrait Creator
 
 A character portrait editor for Paradox games. It is being built step by step;
-for now it edits the portraits of Victoria 3 in 3D, read from the game folder
-configured in the settings: a man, a woman, a boy or a girl with their eyes,
-teeth, hair and beard, their skin, hair and eyes coloured from the game's
-palettes, and the head joined to the body the way the game joins them, and
-saves them as the DNA of a character, which the game reads from
-`common/dna_data`.
+for now it edits the portraits of Victoria 3 and Europa Universalis 5 in 3D,
+read from the game folder configured in the settings: a man, a woman, a boy
+or a girl with their eyes, teeth, hair and beard, their skin, hair and eyes
+coloured from the game's palettes, and the head joined to the body the way
+the game's `gfx/portraits/portraitsettings.txt` joins them, and saves them
+as the DNA of a character, which the game reads from `common/dna_data`, or
+in Europa Universalis 5 from `common/persistent_dna`.
 
 ## Starting a portrait
 
@@ -20,7 +21,8 @@ Portrait** (`Ctrl+N`) asks again:
   its likeliest look: each gene at its likeliest choice, each range at its
   middle.
 - **From a Character** is the DNA of one of the characters of
-  `common/dna_data`, as the game writes it.
+  `common/dna_data`, or of `common/persistent_dna` in Europa Universalis 5,
+  as the game writes it.
 - **From the Clipboard** is a DNA copied from anywhere, written in any of the
   game's three ways: a definition as `common/dna_data` holds one, the
   persistent DNA the game writes out, or a DNA string. The button says
@@ -35,9 +37,10 @@ Portrait** (`Ctrl+N`) asks again:
 The picker lists ethnicities and characters by the keys the game defines them
 under, such as `dna_abraham_lincoln`, since the files give them no other
 name, and draws each as it is picked, as a man, a woman, a boy or a girl: a
-character's DNA does not say which. A boy is drawn with the body and head of
-a man and a girl with a woman's, the genes' settings for children making a
-child of them. The picture shows the face or the whole figure.
+character's DNA does not say which. A boy and a girl are drawn with the
+bodies and heads the game gives them, in Victoria 3 those of a man and a
+woman, the genes' settings for children making a child of them. The
+picture shows the face or the whole figure.
 
 ## Creating
 
@@ -62,6 +65,9 @@ hairstyle, a beard, a moustache or a prop is a template and the accessory of
 it the slider picks. A prop, such as glasses or a cane, is worn on the head
 or hangs from the hand it is held in, and an animation that holds a prop of
 its own holds it as well, as the game does.
+Clothing a DNA can give, such as the `headwear` and `clothes` genes Europa
+Universalis 5 has, is neither listed nor drawn: the game dresses its
+characters itself and ignores them. A DNA saved keeps them as they were.
 The colours are picked from the palettes of the skin, the hair and the eyes,
 with the rectangles the ethnicity picks them from outlined, or typed in
 beneath each as the place in the palette, across and down from 0 to 255. The search above
@@ -69,17 +75,26 @@ the panel looks through every gene. A gene the creator has no name for, such
 as a mod's, is listed under **Other** by its key.
 
 The portrait is lit as the game lights it, by an environment of
-`gfx/portraits/environments`, `environment_standard` unless another is picked
-in the list over the views: its cubemap, its lights, the shadows they cast,
-the ambient occlusion the settings of `gfx/portraits/jomini_environment.txt`
-ask for, which darkens the creases of the skin towards a deep red, and the
-game's tonemap. **studio** lights it with the renderer's own lights instead.
+`gfx/portraits/environments`, the one the game's portrait editor starts in
+unless another is picked in the list over the views: its cubemap, its
+lights, the shadows they cast, the ambient occlusion the settings of
+`gfx/portraits/jomini_environment.txt` ask for, which darkens the creases of
+the skin towards a deep red, and the game's tonemap. **studio** lights it
+with the renderer's own lights instead.
 The list beside it picks one of the game's cameras of
 `gfx/portraits/cameras`, such as `portrait_editor` or `camera_body`, which
 stands where the game's does; **free**, or Face and Whole Figure, frame it
-freely again. The game sets the exposure and the tonemap of its portraits in
-its engine, which ships no file they can be read from, so both are fitted to
-the game's portrait editor.
+freely again.
+
+Each game grades its portraits its own way, and the two are kept apart; the
+creator tells them by their folders, which Europa Universalis 5 splits into
+layers. Victoria 3 sets the exposure and the tonemap of its portraits in its
+engine, which ships no file they can be read from, so both are fitted to
+its portrait editor, and it starts in `environment_standard`. Europa
+Universalis 5 writes its own into `jomini_environment.txt`, a fixed exposure
+and the Uncharted curve, which the creator follows, as bright as the game's
+pictures; it starts in `portrait_editor`. Its portraits show next to none of
+the ambient occlusion its settings ask for, so they are drawn without it.
 
 The portrait plays an animation set of
 `gfx/portraits/portrait_animations`, `idle` unless another is picked in the
@@ -133,6 +148,20 @@ dna_my_character = {
 }
 ```
 
+Europa Universalis 5 writes its characters with a priority and the tags of
+the characters they are for in the place of `enabled`; a character of its
+files keeps both, and a new one is given a priority of 1:
+
+```
+magnus_eriksson = {
+    priority = 1
+    tags = { swe_magnus_eriksson }
+    portrait_info = {
+        genes = { ... }
+    }
+}
+```
+
 A portrait started from a character has its identifier to start with, and
 saves back into the file the character came from; one started from an
 ethnicity or from scratch has none, and is given one before it is saved:
@@ -169,9 +198,10 @@ so it can only be read with the same genes it was written with.
 
 The game's own files are not written over. With a mod configured after the
 game, a character of the game is saved into the mod, at the same place: the
-dialog opens at the file of the same name in the mod's `common/dna_data`,
-where its DNA overrides the game's. Its recessive alleles, and any gene the
-creator does not edit, are written as the game's file has them.
+dialog opens at the file of the same name in the mod's `common/dna_data`, or
+`in_game/common/persistent_dna` in Europa Universalis 5, where its DNA
+overrides the game's. Its recessive alleles, and any gene the creator does
+not edit, are written as the game's file has them.
 
 ## Settings
 

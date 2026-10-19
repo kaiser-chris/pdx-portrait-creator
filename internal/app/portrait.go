@@ -21,34 +21,10 @@ import (
 	"github.com/kaiser-chris/pdx-portrait-creator/internal/config"
 )
 
-// The joints the head is attached to the body by, which
-// gfx/portraits/portraitsettings.txt names, and the bone of the head the face
-// moves with, which the camera follows.
-const (
-	bodyJoint = "bn_sp_thoracic"
-	headJoint = "head_root"
-	faceJoint = "bn_h_head"
-)
-
-// entitiesOf are the body and the head Victoria 3's portrait settings give a
-// sex: a boy is drawn with the body and the head of a man and a girl with a
-// woman's, which the genes' settings for children and the age presets make a
-// child of.
-func entitiesOf(sex genes.Sex) (body, head string) {
-	if sex == genes.Female || sex == genes.Girl {
-		return "female_body_entity", "female_head_entity"
-	}
-
-	return "male_body_entity", "male_head_entity"
-}
-
-// headLinks are all the joints the head is attached to the body by, which it
-// follows wherever the body's additive animations take them.
-var headLinks = []render.JointLink{
-	{Parent: bodyJoint, Child: headJoint},
-	{Parent: "bn_l_clavicle", Child: "bn_h_l_clavicle"},
-	{Parent: "bn_r_clavicle", Child: "bn_h_r_clavicle"},
-}
+// faceJoints are the bones of the head the face moves with, which the
+// camera follows: Victoria 3's and Europa Universalis 5's, whose cameras look
+// at them. No file says which a head has, so the first it has is taken.
+var faceJoints = []string{"bn_h_head", "Head_B"}
 
 // seamTolerance is how near a vertex of the head has to lie to one of the
 // body to be taken for the same, in the units of the meshes, centimetres;
@@ -104,6 +80,10 @@ type portrait struct {
 	loader     *entity.Loader
 	bodySource *model.Model
 
+	// assembly is how the game puts the portrait together: which body and
+	// head each sex is drawn with, and the joints that join them.
+	assembly assembly
+
 	// The game data a character is made from: the genes, the ethnicities as
 	// written, the DNA of the game's characters, the portrait accessories
 	// the accessory genes pick, and the palettes the colours are picked
@@ -111,9 +91,15 @@ type portrait struct {
 	genes       *genes.Genes
 	ethnicities database.Table[genes.Ethnicity]
 	characters  database.Table[genes.DNA]
-	accessories database.Table[genes.Accessory]
-	palettes    map[string]*texture.Image
-	swatches    map[string]*image.RGBA
+
+	// characterFolder is the folder below a game or mod folder its characters
+	// are kept in, common/dna_data or, in Europa Universalis 5,
+	// common/persistent_dna, whose DNA is written with a priority; see
+	// characterFolderOf.
+	characterFolder string
+	accessories     database.Table[genes.Accessory]
+	palettes        map[string]*texture.Image
+	swatches        map[string]*image.RGBA
 
 	// character is the DNA the portrait is drawn from, and basis what it
 	// started from.
@@ -225,25 +211,27 @@ type portraitResult struct {
 	dna        *genes.DNA
 	basis      basis
 
-	loader       *entity.Loader
-	assets       *asset.Assets
-	animations   database.Table[genes.AnimationSet]
-	set          *folders.Set
-	environments database.Table[staged.Environment]
-	cameras      database.Table[staged.PortraitCamera]
-	settings     staged.Settings
-	body, head   *model.Model
-	parts        []string
-	genes        *genes.Genes
-	ethnicities  database.Table[genes.Ethnicity]
-	characters   database.Table[genes.DNA]
-	accessories  database.Table[genes.Accessory]
-	modifiers    database.Table[genes.ModifierGroup]
-	palettes     map[string]*texture.Image
-	swatches     map[string]*image.RGBA
-	decals       map[string]*texture.Image
-	diagnostics  report.Diagnostics
-	err          error
+	assembly        assembly
+	loader          *entity.Loader
+	assets          *asset.Assets
+	animations      database.Table[genes.AnimationSet]
+	set             *folders.Set
+	environments    database.Table[staged.Environment]
+	cameras         database.Table[staged.PortraitCamera]
+	settings        staged.Settings
+	body, head      *model.Model
+	parts           []string
+	genes           *genes.Genes
+	ethnicities     database.Table[genes.Ethnicity]
+	characters      database.Table[genes.DNA]
+	characterFolder string
+	accessories     database.Table[genes.Accessory]
+	modifiers       database.Table[genes.ModifierGroup]
+	palettes        map[string]*texture.Image
+	swatches        map[string]*image.RGBA
+	decals          map[string]*texture.Image
+	diagnostics     report.Diagnostics
+	err             error
 }
 
 // headResult is what reading the head again with other parts comes back
@@ -317,14 +305,20 @@ func readPortrait(set *folders.Set, sex genes.Sex, dna *genes.DNA, from basis) p
 	result := portraitResult{sex: sex, basis: from}
 	assets := asset.Load(set)
 	loader := entity.NewLoader(set, assets)
-	bodyEntity, _ := entitiesOf(sex)
 
-	body, diagnostics, err := loader.Load(bodyEntity)
+	// How the game puts a portrait together decides which body is read.
+	built, diagnostics := loadAssembly(set)
+	result.assembly = built
+	result.diagnostics = append(result.diagnostics, diagnostics...)
+
+	bodyEntity, _ := built.entities(sex)
+
+	body, read, err := loader.Load(bodyEntity)
 	if err != nil {
 		return portraitResult{err: err}
 	}
 
-	result.diagnostics = append(result.diagnostics, diagnostics...)
+	result.diagnostics = append(result.diagnostics, read...)
 	result.loader, result.body = loader, body
 	result.assets = assets
 
@@ -353,6 +347,7 @@ func readPortrait(set *folders.Set, sex genes.Sex, dna *genes.DNA, from basis) p
 	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
 
 	result.characters, diagnostics = genes.LoadDNA(set)
+	result.characterFolder = characterFolderOf(set)
 	result.diagnostics = append(result.diagnostics, diagnostics.Filter(report.SeverityWarning)...)
 
 	result.accessories, diagnostics = genes.LoadAccessories(set)
@@ -403,7 +398,7 @@ func readPortrait(set *folders.Set, sex genes.Sex, dna *genes.DNA, from basis) p
 	parts, _, diagnostics := accessoryParts(result.genes, result.accessories, dna, sex)
 	result.diagnostics = append(result.diagnostics, diagnostics...)
 
-	head, diagnostics, err := buildHead(loader, sex, body, parts)
+	head, diagnostics, err := buildHead(loader, built, sex, body, parts)
 	if err != nil {
 		return portraitResult{err: err}
 	}
@@ -437,7 +432,7 @@ func swatchOf(palette *texture.Image) *image.RGBA {
 // that is not there is reported.
 func accessoryParts(all *genes.Genes, accessories database.Table[genes.Accessory], dna *genes.DNA, sex genes.Sex) (parts []string, hung []propSpec, diagnostics report.Diagnostics) {
 	for key, gene := range all.AccessoryGenes.All() {
-		if len(gene.Templates) == 0 {
+		if len(gene.Templates) == 0 || clothing(all, key) {
 			continue
 		}
 
@@ -478,8 +473,8 @@ func accessoryParts(all *genes.Genes, accessories database.Table[genes.Accessory
 // buildHead reads the head of a sex, seats it on the body, and adds the parts
 // posed with it. A part that cannot be read is reported, and the head drawn
 // without it.
-func buildHead(loader *entity.Loader, sex genes.Sex, body *model.Model, parts []string) (*model.Model, report.Diagnostics, error) {
-	_, headEntity := entitiesOf(sex)
+func buildHead(loader *entity.Loader, built assembly, sex genes.Sex, body *model.Model, parts []string) (*model.Model, report.Diagnostics, error) {
+	_, headEntity := built.entities(sex)
 
 	head, diagnostics, err := loader.Load(headEntity)
 	if err != nil {
@@ -487,7 +482,7 @@ func buildHead(loader *entity.Loader, sex genes.Sex, body *model.Model, parts []
 	}
 
 	// A head that cannot be seated is still drawn, where its mesh puts it.
-	if err := seat(body, head); err != nil {
+	if err := seat(body, head, built.links()[0]); err != nil {
 		diagnostics = append(diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "entity " + headEntity, Message: err.Error()})
 	} else {
 		// Where the neck meets the body the two meshes share a ring of
@@ -512,17 +507,17 @@ func buildHead(loader *entity.Loader, sex genes.Sex, body *model.Model, parts []
 	return head, diagnostics, nil
 }
 
-// seat places the head where the game attaches it to the body: with its
-// joint on the body's, in the pose their meshes are stored in.
-func seat(body, head *model.Model) error {
-	thoracic, ok := body.Joint(bodyJoint)
+// seat places the head where the game attaches it to the body: with the
+// joint of the link on the body's, in the pose their meshes are stored in.
+func seat(body, head *model.Model, link render.JointLink) error {
+	thoracic, ok := body.Joint(link.Parent)
 	if !ok {
-		return fmt.Errorf("%s has no joint %s to attach the head to; the head is drawn where its mesh puts it", body.Name, bodyJoint)
+		return fmt.Errorf("%s has no joint %s to attach the head to; the head is drawn where its mesh puts it", body.Name, link.Parent)
 	}
 
-	root, ok := head.Joint(headJoint)
+	root, ok := head.Joint(link.Child)
 	if !ok {
-		return fmt.Errorf("%s has no joint %s to attach it by; it is drawn where its mesh puts it", head.Name, headJoint)
+		return fmt.Errorf("%s has no joint %s to attach it by; it is drawn where its mesh puts it", head.Name, link.Child)
 	}
 
 	undo, ok := root.Inverse()
@@ -576,11 +571,16 @@ func (p *portrait) poll() bool {
 		p.body, p.head = body, head
 
 		// The head follows the joints of the body it is attached by, which
-		// the body's additive animations move.
-		head.Follow(body, headLinks...)
+		// the body's additive animations move, and the ring where its neck
+		// meets the body is drawn where the body's is, which its own blend
+		// shapes and bones would part from it.
+		head.Follow(body, result.assembly.links()...)
+		head.Weld(body, seamTolerance)
 
 		p.sex, p.loader, p.bodySource, p.parts = result.sex, result.loader, result.body, result.parts
+		p.assembly = result.assembly
 		p.genes, p.ethnicities, p.characters, p.accessories = result.genes, result.ethnicities, result.characters, result.accessories
+		p.characterFolder = result.characterFolder
 		p.modifiers = result.modifiers
 		p.palettes, p.swatches = result.palettes, result.swatches
 		p.decalTextures, p.decalProblem = result.decals, ""
@@ -644,7 +644,8 @@ func (p *portrait) pollHead() {
 
 			p.head.Unload()
 			p.head, p.parts = head, result.parts
-			head.Follow(p.body, headLinks...)
+			head.Follow(p.body, p.assembly.links()...)
+			head.Weld(p.body, seamTolerance)
 			p.animation.headChanged(result.head)
 			p.animation.restart(p.sex)
 
@@ -698,13 +699,13 @@ func (p *portrait) rebuildHead() {
 	}
 
 	p.rebuilding = true
-	generation, loader, sex, body := p.generation, p.loader, p.sex, p.bodySource
+	generation, loader, built, sex, body := p.generation, p.loader, p.assembly, p.sex, p.bodySource
 
 	go func() {
 		result := headResult{generation: generation, parts: parts}
 
 		if needHead {
-			result.head, result.diagnostics, result.err = buildHead(loader, sex, body, parts)
+			result.head, result.diagnostics, result.err = buildHead(loader, built, sex, body, parts)
 		}
 
 		for _, prop := range missing {
@@ -727,7 +728,9 @@ func (p *portrait) rebuildHead() {
 // colour sets the colours of the skin, the hair and the eyes from the
 // palettes, where the colour genes pick them, as the DNA's two numbers for
 // each from 0 to 255. A palette that could not be read leaves its colour as
-// the renderer has it.
+// the renderer has it. A game whose portrait settings say its palettes are
+// sRGB, as Europa Universalis 5's do, multiplies by the colour in linear
+// light; the others by the colour as it is stored.
 func (p *portrait) colour() {
 	look := &p.viewer.Look
 	look.PaletteColor, look.HairColor, look.EyeColor = render.DefaultLook.PaletteColor, render.DefaultLook.HairColor, render.DefaultLook.EyeColor
@@ -740,6 +743,9 @@ func (p *portrait) colour() {
 
 		if colour, ok := p.palettes[what].Sample(float64(gene.value[0])/maxGeneValue, float64(gene.value[1])/maxGeneValue); ok {
 			*target = render.PaletteColour(colour)
+			if p.assembly.SRGBColorPalettes {
+				*target = render.SRGBPaletteColour(colour)
+			}
 		}
 	}
 }
@@ -766,14 +772,18 @@ func readTexture(set *folders.Set, relative string) (*texture.Image, error) {
 func (p *portrait) face() [2][3]float32 {
 	box := [2][3]float32{p.head.Min, p.head.Max}
 
-	rest, posed, ok := p.head.JointPosition(faceJoint)
-	if !ok {
-		return box
-	}
+	for _, joint := range faceJoints {
+		rest, posed, ok := p.head.JointPosition(joint)
+		if !ok {
+			continue
+		}
 
-	for axis := range 3 {
-		box[0][axis] += posed[axis] - rest[axis]
-		box[1][axis] += posed[axis] - rest[axis]
+		for axis := range 3 {
+			box[0][axis] += posed[axis] - rest[axis]
+			box[1][axis] += posed[axis] - rest[axis]
+		}
+
+		return box
 	}
 
 	return box
@@ -918,10 +928,11 @@ func (a *App) start(from basis, dna *genes.DNA, sex genes.Sex) {
 		return
 	}
 
-	// A boy and a man, or a girl and a woman, share their body and head:
-	// only the settings of the genes change between them.
-	body, _ := entitiesOf(sex)
-	loaded, _ := entitiesOf(p.sex)
+	// Where a boy and a man, or a girl and a woman, share their body and
+	// head, as in Victoria 3, only the settings of the genes change between
+	// them.
+	body, _ := p.assembly.entities(sex)
+	loaded, _ := p.assembly.entities(p.sex)
 
 	if !p.loaded() || body != loaded {
 		p.load(a.settings.Folders, sex, dna, from)

@@ -66,6 +66,10 @@ type morphGene struct {
 	// or lays a decal over its skin. A gene that only replaces textures,
 	// which are not drawn yet, changes nothing.
 	drawn bool
+
+	// idle says why a gene that is not drawn changes nothing, for the panel
+	// to say; see idleReason.
+	idle string
 }
 
 // accessoryGene is one accessory gene: which of its templates is chosen, in
@@ -80,7 +84,8 @@ type accessoryGene struct {
 	category int
 	name     string
 
-	// hidden is set for the parts of the head the panel does not list.
+	// hidden is set for the parts of the head the panel does not list,
+	// and for the clothes the game dresses a character in itself.
 	hidden bool
 }
 
@@ -118,6 +123,10 @@ func newCharacter(all *genes.Genes, sex genes.Sex, dna *genes.DNA, drawable []st
 			}
 		}
 
+		if !morph.drawn {
+			morph.idle = idleReason(gene, sex)
+		}
+
 		c.morphs = append(c.morphs, morph)
 	}
 
@@ -133,7 +142,7 @@ func newCharacter(all *genes.Genes, sex genes.Sex, dna *genes.DNA, drawable []st
 			templates: byIndex(gene.Templates),
 			category:  category,
 			name:      name,
-			hidden:    slices.Contains(hiddenGenes, gene.Key),
+			hidden:    slices.Contains(hiddenGenes, gene.Key) || clothing(all, gene.Key),
 		})
 	}
 
@@ -217,7 +226,8 @@ func (c *character) dna() *genes.DNA {
 	}
 
 	for _, colour := range c.colours {
-		add(colour.gene.Key, genes.Allele{Value: int(colour.value[0]), Second: int(colour.value[1])})
+		allele := genes.Allele{Value: int(colour.value[0]), Second: int(colour.value[1])}
+		dna.Genes = append(dna.Genes, genes.GeneValue{Gene: colour.gene.Key, Colour: true, Dominant: allele, Recessive: allele})
 	}
 
 	for _, morph := range c.morphs {
@@ -370,10 +380,13 @@ func (c *character) listed() int {
 }
 
 // lists reports whether the character panel lists any gene under a category,
-// by its position. Other is left out when every gene is known.
+// by its position. A category the game has no gene of is left out, such as
+// Props in a game without a props gene, and Other when every gene is known.
 func (c *character) lists(category int) bool {
-	if categories[category].id != categoryOther {
-		return true
+	for _, colour := range c.colours {
+		if colour.category == category {
+			return true
+		}
 	}
 
 	for _, morph := range c.morphs {
@@ -471,5 +484,36 @@ func (c *character) resetGene(key string) {
 			c.colours[index].value = basis.colours[index].value
 			c.coloursChanged = true
 		}
+	}
+}
+
+// The reasons a morph gene that is not drawn changes nothing.
+const (
+	idleEmpty      = "Changes nothing: the game's files give it nothing to do"
+	idleTexture    = "Changes nothing drawn yet: a texture"
+	idleAttributes = "Changes nothing: no model has the attributes it sets"
+)
+
+// idleReason says why a morph gene that is not drawn changes nothing for a
+// sex: its templates set nothing at all, as Europa Universalis 5's
+// gene_head_size, whose setting the game's file leaves commented out; they
+// only change textures, which are not drawn yet; or they set attributes no
+// model of the portrait has.
+func idleReason(gene *genes.MorphGene, sex genes.Sex) string {
+	textures, settings := false, false
+
+	for _, template := range gene.Templates {
+		morph := template.For(sex)
+		textures = textures || len(morph.TextureOverrides) > 0 || len(morph.HSVShifts) > 0
+		settings = settings || len(morph.Settings) > 0
+	}
+
+	switch {
+	case textures:
+		return idleTexture
+	case settings:
+		return idleAttributes
+	default:
+		return idleEmpty
 	}
 }

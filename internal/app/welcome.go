@@ -168,9 +168,9 @@ func (a *App) welcomeWindow() {
 
 	imgui.SameLine()
 
-	ethnicities, characters := 0, 0
+	ethnicities, characters, folder := 0, 0, genes.FolderDNA.Path
 	if ready {
-		ethnicities, characters = p.ethnicities.Len(), p.characters.Len()
+		ethnicities, characters, folder = p.ethnicities.Len(), p.characters.Len(), p.characterFolder
 	}
 
 	if choice(gui.Iconed(gui.IconGroups, "From an Ethnicity"), fmt.Sprintf("One of the %d ethnicities in common/ethnicities, at its likeliest look.", ethnicities), width) {
@@ -179,7 +179,7 @@ func (a *App) welcomeWindow() {
 
 	imgui.SameLine()
 
-	if choice(gui.Iconed(gui.IconPerson, "From a Character"), fmt.Sprintf("One of the %d characters in common/dna_data, with their exact DNA.", characters), width) {
+	if choice(gui.Iconed(gui.IconPerson, "From a Character"), fmt.Sprintf("One of the %d characters in %s, with their exact DNA.", characters, folder), width) {
 		a.openPicker(pickCharacters)
 	}
 

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/kaiser-chris/pdx-parser-go/genes"
+
 	"github.com/kaiser-chris/pdx-portrait-creator/internal/gui"
 )
 
@@ -11,8 +13,10 @@ import (
 // lists them under, and gives each the name the panel shows it by. The game
 // files name a gene only by its key, such as gene_forehead_brow_inner_height,
 // and group them by nothing a person editing a face would look for, so both
-// are kept here, for the genes of Victoria 3. A gene the catalogue does not
-// know, such as one a mod adds, is listed under Other by its key.
+// are kept here, for the genes of Victoria 3 and Europa Universalis 5, which
+// share many keys and name some of the same things differently, such as
+// gene_eye_distance and gene_eye_spacing. A gene the catalogue does not know,
+// such as one a mod adds, is listed under Other by its key.
 
 // category is one group of genes in the character panel.
 type category struct {
@@ -44,10 +48,16 @@ var categories = []category{
 	{id: "head", icon: gui.IconHead, name: "Head", genes: []catalogued{
 		{"gene_head_height", "Head Height"},
 		{"gene_head_width", "Head Width"},
+		{"gene_head_size", "Head Size"},
 		{"gene_head_profile", "Profile"},
 		{"gene_head_top_height", "Crown Height"},
 		{"gene_head_top_width", "Crown Width"},
 		{"gene_asian_east", "East Asian Features"},
+		{"gene_head_face_forward", "Face Projection"},
+		{"gene_skull_height", "Skull Height"},
+		{"gene_skull_width", "Skull Width"},
+		{"gene_skull_depth", "Skull Depth"},
+		{"gene_temple_def", "Temple Definition"},
 	}},
 	{id: "forehead", icon: gui.IconBrows, name: "Forehead & Brows", genes: []catalogued{
 		{"gene_forehead_height", "Forehead Height"},
@@ -60,36 +70,55 @@ var categories = []category{
 		{"gene_forehead_brow_curve", "Brow Arch"},
 		{"gene_forehead_brow_inner_height", "Inner Brow Height"},
 		{"gene_forehead_brow_outer_height", "Outer Brow Height"},
+		{"gene_forehead_brow_angle", "Brow Angle"},
 		{"gene_eyebrows_shape", "Eyebrow Shape"},
 		{"gene_eyebrows_fullness", "Eyebrow Thickness"},
+		{"gene_eyebrows_inner", "Inner Eyebrows"},
+		{"gene_eyebrows_outer", "Outer Eyebrows"},
+		{"expressions_brow", "Brow Expression"},
+		{"expressions_forehead", "Forehead Expression"},
 	}},
 	{id: "eyes", icon: gui.IconEyes, name: "Eyes", genes: []catalogued{
 		{"gene_eye_size", "Eye Size"},
 		{"gene_eye_distance", "Eye Spacing"},
+		{"gene_eye_spacing", "Eye Spacing"},
 		{"gene_eye_height", "Eye Height"},
 		{"gene_eye_angle", "Eye Tilt"},
 		{"gene_eye_depth", "Eye Depth"},
+		{"gene_eye_forward", "Eye Projection"},
+		{"gene_eye_socket", "Eye Socket"},
 		{"gene_eye_shut", "Openness"},
+		{"gene_eye_open", "Openness"},
 		{"gene_eye_upper_lid_size", "Upper Lid Size"},
+		{"gene_eye_upper_lid_shape", "Upper Lid Shape"},
+		{"gene_eye_lower_lid_def", "Lower Lid Definition"},
 		{"gene_eye_fold_shape", "Lid Fold"},
 		{"gene_eye_fold_droop", "Lid Droop"},
 		{"gene_eye_corner_def", "Corner Definition"},
 		{"gene_eye_corner_depth_min", "Inner Corner Depth"},
+		{"eyelashes", "Eyelashes"},
+		{"gene_eyelashes", "Eyeliner"},
+		{"expressions_eyes", "Eye Expression"},
 	}},
 	{id: "nose", icon: gui.IconNose, name: "Nose", genes: []catalogued{
 		{"gene_nose_size", "Nose Size"},
+		{"gene_nose_width", "Nose Width"},
 		{"gene_nose_length", "Length"},
 		{"gene_nose_height", "Height"},
 		{"gene_nose_forward", "Projection"},
 		{"gene_nose_curve", "Bridge Curve"},
 		{"gene_nose_hawk", "Hooked Bridge"},
 		{"gene_nose_ridge_angle", "Bridge Angle"},
+		{"gene_nose_ridge_shape", "Bridge Shape"},
 		{"gene_nose_ridge_width", "Bridge Width"},
 		{"gene_nose_ridge_def", "Bridge Definition"},
 		{"gene_nose_ridge_def_min", "Bridge Softness"},
+		{"gene_nose_root_def", "Root Definition"},
+		{"gene_nose_tip_size", "Tip Size"},
 		{"gene_nose_tip_width", "Tip Width"},
 		{"gene_nose_tip_angle", "Tip Angle"},
 		{"gene_nose_tip_forward", "Tip Projection"},
+		{"gene_nose_tip_def", "Tip Definition"},
 		{"gene_nose_nostril_width", "Nostril Width"},
 		{"gene_nose_nostril_height", "Nostril Height"},
 		{"gene_nose_nostril_angle", "Nostril Flare"},
@@ -100,6 +129,7 @@ var categories = []category{
 		{"gene_cheek_width", "Cheek Width"},
 		{"gene_cheek_forward", "Cheek Projection"},
 		{"gene_cheek_fat", "Cheek Fullness"},
+		{"gene_cheek_def", "Cheek Definition"},
 	}},
 	{id: "mouth", icon: gui.IconMouth, name: "Mouth", genes: []catalogued{
 		{"gene_mouth_width", "Mouth Width"},
@@ -111,15 +141,21 @@ var categories = []category{
 		{"gene_mouth_upper_lip_full", "Upper Lip Fullness"},
 		{"gene_mouth_upper_lip_width", "Upper Lip Width"},
 		{"gene_mouth_upper_lip_curve", "Cupid's Bow"},
+		{"gene_mouth_upper_lip_shape", "Upper Lip Shape"},
 		{"gene_mouth_upper_lip_def", "Upper Lip Definition"},
 		{"gene_mouth_lower_lip_size", "Lower Lip Size"},
 		{"gene_mouth_lower_lip_full", "Lower Lip Fullness"},
 		{"gene_mouth_lower_lip_width", "Lower Lip Width"},
 		{"gene_mouth_lower_lip_def", "Lower Lip Definition"},
 		{"gene_mouth_lower_lip_pads", "Lower Lip Pads"},
+		{"gene_mouth_lower_lip_pad", "Lower Lip Pads"},
+		{"gene_mouth_lip_def", "Lip Definition"},
 		{"gene_mouth_philtrum_width", "Philtrum Width"},
 		{"gene_mouth_philtrum_def", "Philtrum Depth"},
 		{"gene_mouth_philtrum_curve", "Philtrum Curve"},
+		{"gene_mouth_philtrum_shape", "Philtrum Shape"},
+		{"gene_lip_color", "Lip Colour"},
+		{"expressions_mouth", "Mouth Expression"},
 	}},
 	{id: "jaw", icon: gui.IconJaw, name: "Jaw & Chin", genes: []catalogued{
 		{"gene_jaw_width", "Jaw Width"},
@@ -130,6 +166,10 @@ var categories = []category{
 		{"gene_chin_width", "Chin Width"},
 		{"gene_chin_height", "Chin Height"},
 		{"gene_chin_forward", "Chin Projection"},
+		{"gene_chin_size", "Chin Size"},
+		{"gene_chin_length", "Chin Length"},
+		{"gene_chin_def", "Chin Definition"},
+		{"gene_chin_dimple", "Chin Dimple"},
 	}},
 	{id: "ears", icon: gui.IconEars, name: "Ears", genes: []catalogued{
 		{"gene_ear_size", "Ear Size"},
@@ -142,8 +182,11 @@ var categories = []category{
 	{id: "body", icon: gui.IconBody, name: "Neck & Body", genes: []catalogued{
 		{"gene_neck_length", "Neck Length"},
 		{"gene_neck_width", "Neck Width"},
+		{"gene_neck_def", "Neck Definition"},
 		{"gene_bs_body_type", "Build"},
 		{"gene_height", "Height"},
+		{"poses_height", "Height"},
+		{"gene_body_weight", "Weight"},
 	}},
 	{id: "ageing", icon: gui.IconAgeing, name: "Ageing & Skin", genes: []catalogued{
 		{"gene_age", "Apparent Age"},
@@ -152,15 +195,25 @@ var categories = []category{
 		{"gene_old_nose", "Aged Nose"},
 		{"gene_old_mouth", "Aged Mouth"},
 		{"gene_old_ears", "Aged Ears"},
+		{"gene_aging_body", "Aged Body"},
+		{"gene_aging_eyes", "Aged Eyes"},
+		{"gene_aging_forehead", "Aged Forehead"},
+		{"gene_aging_mouth", "Aged Mouth"},
+		{"gene_aging_colors", "Ageing Colours"},
 		{"gene_crowfeet", "Crow's Feet"},
 		{"gene_frown", "Frown Lines"},
 		{"gene_surprise", "Forehead Lines"},
 		{"gene_complexion", "Complexion"},
+		{"gene_skin_detail", "Skin Detail"},
+		{"gene_skin_noise", "Skin Noise"},
+		{"gene_blush", "Blush"},
+		{"gene_eye_socket_color", "Eye Socket Colour"},
 		{"gene_stubble", "Stubble"},
 		{"gene_face_dacals", "Face Marks"},
 	}},
 	{id: "hair", icon: gui.IconHair, name: "Hair & Beard", genes: []catalogued{
 		{"hairstyles", "Hairstyle"},
+		{"hair_styles", "Hairstyle"},
 		{"beards", "Beard"},
 		{"mustaches", "Moustache"},
 	}},
@@ -176,9 +229,20 @@ var categories = []category{
 }
 
 // hiddenGenes are genes of a DNA the character panel does not list: the
-// parts of the head, which have one template each and are not a choice, and
-// which the head is drawn with whatever they say.
-var hiddenGenes = []string{"eye_accessory", "eye_lashes_accessory", "teeth_accessory"}
+// parts of the head, whose templates draw the same part, so are not a
+// choice, and which the head is drawn with whatever they say.
+var hiddenGenes = []string{"eye_accessory", "eye_lashes_accessory", "teeth_accessory", "eyes", "mouth_inside"}
+
+// clothing reports whether an accessory gene is one of the clothes the game
+// dresses a character in itself, such as headwear or clothes: a gene of the
+// same key as one of its special genes. A DNA can give one, as Europa
+// Universalis 5's DLC makes ordinary genes of headwear and clothes, but the
+// game draws its own and ignores the DNA's, so the panel does not list them
+// and the portrait is drawn without them. A DNA saved keeps them as they
+// were.
+func clothing(all *genes.Genes, key string) bool {
+	return all.SpecialAccessoryGenes.Has(key)
+}
 
 // catalogue finds the category and the name of every gene the catalogue
 // knows, by its key.

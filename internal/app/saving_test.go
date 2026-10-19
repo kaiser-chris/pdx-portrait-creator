@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -126,26 +127,41 @@ func TestSavingDNA(t *testing.T) {
 		t.Error("Save is offered over the welcome screen")
 	}
 
+	// Victoria 3's Lincoln, or the first character of a game without him,
+	// and a gene of the nose either game has.
+	character, noseGene := "dna_abraham_lincoln", "gene_nose_size"
+	if !p.characters.Has(character) {
+		keys := p.characters.Keys()
+		slices.Sort(keys)
+		character, noseGene = keys[0], "gene_nose_width"
+	}
+
 	application.state.picker.kind = pickCharacters
-	application.pick("dna_abraham_lincoln")
+	application.pick(character)
 	waitForHead(t, application)
 	application.closePicker(true)
 	application.state.welcome = false
 
-	original, _ := p.characters.Get("dna_abraham_lincoln")
+	original, _ := p.characters.Get(character)
 
-	if p.basis.identifier != "dna_abraham_lincoln" || p.basis.file == nil || !within(game, p.basis.file.path) {
+	if p.basis.identifier != character || p.basis.file == nil || !within(game, p.basis.file.path) {
 		t.Fatalf("basis %+v, want the character's identifier and its file in the game", p.basis)
 	}
 
 	// A gene changed, and saved: the game's file is not written over, the
 	// dialog opens at the same place in the mod instead.
-	nose := morphOf(t, p.character, "gene_nose_size")
+	nose := morphOf(t, p.character, noseGene)
 	nose.value = 200
 	p.character.changed = true
 	application.Step()
 
-	target := filepath.Join(mod, "common", "dna_data", filepath.Base(p.basis.file.path))
+	// The mod's file is at the place of the game's, layer and all.
+	relative, err := filepath.Rel(game, p.basis.file.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := filepath.Join(mod, relative)
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -160,20 +176,26 @@ func TestSavingDNA(t *testing.T) {
 
 	_, saved := readDNAFile(t, target)
 
-	lincoln, ok := saved["dna_abraham_lincoln"]
+	kept, ok := saved[character]
 	if !ok {
-		t.Fatalf("the mod's file defines %v, want dna_abraham_lincoln", saved)
+		t.Fatalf("the mod's file defines %v, want %s", saved, character)
 	}
 
-	written, _ := lincoln.Gene("gene_nose_size")
-	read, _ := original.Gene("gene_nose_size")
+	written, _ := kept.Gene(noseGene)
+	read, _ := original.Gene(noseGene)
 
 	if written.Dominant.Value != 200 || written.Recessive != read.Recessive {
 		t.Errorf("the nose was written as %+v, want 200 over the recessive %+v the game's file has", written, read.Recessive)
 	}
 
-	if len(lincoln.Genes) < len(original.Genes) {
-		t.Errorf("%d genes written, the game's file has %d", len(lincoln.Genes), len(original.Genes))
+	if len(kept.Genes) < len(original.Genes) {
+		t.Errorf("%d genes written, the game's file has %d", len(kept.Genes), len(original.Genes))
+	}
+
+	// What else the game's file says of the DNA is kept, such as the
+	// priority and tags of Europa Universalis 5's.
+	if kept.Priority != original.Priority || !slices.Equal(kept.Tags, original.Tags) {
+		t.Errorf("written with priority %v and tags %v, the game's file has %v and %v", kept.Priority, kept.Tags, original.Priority, original.Tags)
 	}
 
 	if !samePath(p.basis.file.path, target) {
@@ -199,13 +221,13 @@ func TestSavingDNA(t *testing.T) {
 	application.Step()
 
 	text, saved := readDNAFile(t, target)
-	if written, _ := saved["dna_abraham_lincoln"].Gene("gene_nose_size"); written.Dominant.Value != 30 || !strings.HasPrefix(text, "# kept by hand") || strings.Count(text, "dna_abraham_lincoln =") != 1 {
+	if written, _ := saved[character].Gene(noseGene); written.Dominant.Value != 30 || !strings.HasPrefix(text, "# kept by hand") || strings.Count(text, character+" =") != 1 {
 		t.Errorf("saved again:\n%s", text)
 	}
 
 	// Each save puts the DNA string on the line above the definition, and
 	// leaves the strings of earlier saves above it.
-	before, _, _ := strings.Cut(text, "dna_abraham_lincoln = {")
+	before, _, _ := strings.Cut(text, character+" = {")
 	comments := strings.Split(strings.TrimSpace(before), "\n")
 
 	if len(comments) != 3 || !strings.HasPrefix(comments[1], "# ") || !strings.HasPrefix(comments[2], "# ") || comments[1] == comments[2] {
@@ -213,13 +235,13 @@ func TestSavingDNA(t *testing.T) {
 	}
 
 	fromString, problems := p.genes.ReadString(strings.TrimPrefix(comments[2], "# "))
-	if nose, _ := fromString.Gene("gene_nose_size"); len(problems) > 0 || nose.Dominant.Value != 30 {
+	if nose, _ := fromString.Gene(noseGene); len(problems) > 0 || nose.Dominant.Value != 30 {
 		t.Errorf("the string above the definition reads as a nose of %+v, %v; want 30", nose, problems)
 	}
 
 	// Under a new identifier, saving asks what to do with the DNA it came
 	// from; added as new, both are there.
-	p.basis.identifier = "dna_abraham_lincoln_old"
+	p.basis.identifier = character + "_old"
 	application.save()
 
 	if !application.state.renameAsked {
@@ -229,18 +251,18 @@ func TestSavingDNA(t *testing.T) {
 	application.Step()
 	application.writeDNA(target, p.basis.identifier)
 
-	if _, saved := readDNAFile(t, target); saved["dna_abraham_lincoln"] == nil || saved["dna_abraham_lincoln_old"] == nil {
+	if _, saved := readDNAFile(t, target); saved[character] == nil || saved[character+"_old"] == nil {
 		t.Errorf("added as new, the file defines %v, want both", keys(saved))
 	}
 
 	// Renamed, the DNA it was read as takes the new identifier.
-	p.basis.identifier = "dna_abraham_lincoln_young"
+	p.basis.identifier = character + "_young"
 	application.save()
 	application.Step()
 	application.writeDNA(target, p.basis.file.key)
 
-	if _, saved := readDNAFile(t, target); saved["dna_abraham_lincoln_old"] != nil || saved["dna_abraham_lincoln_young"] == nil || saved["dna_abraham_lincoln"] == nil {
-		t.Errorf("renamed, the file defines %v, want dna_abraham_lincoln and dna_abraham_lincoln_young", keys(saved))
+	if _, saved := readDNAFile(t, target); saved[character+"_old"] != nil || saved[character+"_young"] == nil || saved[character] == nil {
+		t.Errorf("renamed, the file defines %v, want %s and its young version", keys(saved), character)
 	}
 
 	// Copy Script puts the same DNA on the clipboard, as the file has it.
@@ -250,13 +272,13 @@ func TestSavingDNA(t *testing.T) {
 	application.copyScript()
 
 	copied := rl.GetClipboardText()
-	if text, _ := readDNAFile(t, target); !strings.Contains(text, copied) || !strings.Contains(copied, "\ndna_abraham_lincoln_young = {") {
+	if text, _ := readDNAFile(t, target); !strings.Contains(text, copied) || !strings.Contains(copied, "\n"+character+"_young = {") {
 		t.Errorf("copied:\n%s\nwhich the file does not hold as it was saved", copied)
 	}
 
 	// The welcome screen finds each of the three on the clipboard; started
 	// from the persistent DNA, the portrait is as it was and has its key.
-	if found := readPasted(copied, p.genes); found.kind != pastedDefinition || found.key != "dna_abraham_lincoln_young" {
+	if found := readPasted(copied, p.genes); found.kind != pastedDefinition || found.key != character+"_young" {
 		t.Errorf("the script is found as %+v", found)
 	}
 
@@ -269,7 +291,7 @@ func TestSavingDNA(t *testing.T) {
 	application.copyPersistentDNA()
 
 	found := readPasted(rl.GetClipboardText(), p.genes)
-	if found.kind != pastedPersistent || found.key != "dna_abraham_lincoln_young" || found.dna.Sex != p.sex.String() {
+	if found.kind != pastedPersistent || found.key != character+"_young" || found.dna.Sex != p.sex.String() {
 		t.Fatalf("the persistent DNA is found as %+v", found)
 	}
 
@@ -277,16 +299,16 @@ func TestSavingDNA(t *testing.T) {
 	application.fromClipboard()
 	application.Step()
 
-	if p.basis.kind != basisClipboard || p.basis.identifier != "dna_abraham_lincoln_young" || p.basis.file != nil {
+	if p.basis.kind != basisClipboard || p.basis.identifier != character+"_young" || p.basis.file != nil {
 		t.Errorf("started from the clipboard, the basis is %+v", p.basis)
 	}
 
-	if nose := morphOf(t, p.character, "gene_nose_size"); nose.value != 30 {
+	if nose := morphOf(t, p.character, noseGene); nose.value != 30 {
 		t.Errorf("started from the clipboard, the nose is %v, want 30", nose.value)
 	}
 
 	// The picker lists what was saved.
-	if _, ok := p.characters.Get("dna_abraham_lincoln_young"); !ok {
+	if _, ok := p.characters.Get(character + "_young"); !ok {
 		t.Error("the saved DNA is not among the characters")
 	}
 
@@ -331,7 +353,7 @@ func TestSavingDNA(t *testing.T) {
 	}
 
 	// With one, it asks for a file, and goes after what is in it.
-	other := filepath.Join(mod, "common", "dna_data", "other.txt")
+	other := filepath.Join(filepath.Dir(target), "other.txt")
 	if err := os.WriteFile(other, []byte("dna_someone = {\n\tenabled = no\n}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +363,7 @@ func TestSavingDNA(t *testing.T) {
 	application.save()
 	answerDialog(t, application)
 
-	if asked := dialogs.lastAsked(); asked.start != filepath.Join(mod, "common", "dna_data", "dna_my_character.txt") {
+	if asked := dialogs.lastAsked(); asked.start != filepath.Join(filepath.Dir(target), "dna_my_character.txt") {
 		t.Errorf("the dialog opened at %s, want the mod's DNA folder", asked.start)
 	}
 

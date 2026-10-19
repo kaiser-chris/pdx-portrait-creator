@@ -36,10 +36,6 @@ const (
 	popupRename = "Save Under a New Name"
 )
 
-// dnaFolder is the folder the DNA of characters lives in, inside a game or
-// mod folder.
-var dnaFolder = filepath.Join("common", "dna_data")
-
 // dnaFile is where a portrait's DNA is kept: the file it was read from or last
 // saved to, the configured folder that file is in, the key it is defined under
 // there, and the DNA as it was read or saved.
@@ -263,12 +259,19 @@ func (a *App) checkIdentifier() bool {
 // creator shows, laid over the DNA the file had, so that the order of its
 // genes, their recessive alleles and any gene the creator does not know are
 // written back as they were. A DNA new to a file has every gene's recessive
-// allele as its dominant one.
+// allele as its dominant one. The priority and tags of a DNA of Europa
+// Universalis 5 are kept too, and a new one is given a priority of 1, as
+// the game's own have, so that it is written as common/persistent_dna holds
+// its DNA.
 func (a *App) exportDNA() *genes.DNA {
 	edited := a.portrait.character.dna()
 
 	file := a.portrait.basis.file
 	if file == nil || file.original == nil {
+		if a.portrait.persistent() {
+			edited.Priority = database.Some(1.0)
+		}
+
 		return edited
 	}
 
@@ -277,7 +280,7 @@ func (a *App) exportDNA() *genes.DNA {
 		shown[gene.Gene] = gene.Dominant
 	}
 
-	merged := &genes.DNA{Enabled: file.original.Enabled}
+	merged := &genes.DNA{Enabled: file.original.Enabled, Priority: file.original.Priority, Tags: file.original.Tags}
 
 	for _, gene := range file.original.Genes {
 		if dominant, ok := shown[gene.Gene]; ok {
@@ -332,8 +335,9 @@ func (a *App) dnaStart() string {
 	return filepath.Join(folder, b.identifier+".txt")
 }
 
-// workingFolder is the DNA folder of the last configured folder, or that
-// folder itself when it has none yet.
+// workingFolder is the folder of the last configured folder the game keeps
+// its characters in, directly or in one of its layers, such as
+// in_game/common/persistent_dna, or that folder itself when it has none yet.
 func (a *App) workingFolder() string {
 	configured := a.settings.Folders
 	if len(configured) == 0 {
@@ -341,9 +345,17 @@ func (a *App) workingFolder() string {
 	}
 
 	root := configured[len(configured)-1].Path
+	folder := filepath.FromSlash(a.portrait.characterFolder)
 
-	if info, err := os.Stat(filepath.Join(root, dnaFolder)); err == nil && info.IsDir() {
-		return filepath.Join(root, dnaFolder)
+	candidates := []string{filepath.Join(root, folder)}
+	if layered, err := filepath.Glob(filepath.Join(root, "*", folder)); err == nil {
+		candidates = append(candidates, layered...)
+	}
+
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate
+		}
 	}
 
 	return root
@@ -524,4 +536,22 @@ func (a *App) identifierAlerted() bool {
 	}
 
 	return since/blinkPeriod%2 == 0
+}
+
+// characterFolderOf is the folder below a game or mod folder the game keeps
+// the DNA of its characters in: common/persistent_dna where the folders have
+// one, as Europa Universalis 5 does, and common/dna_data otherwise, as
+// Victoria 3 does.
+func characterFolderOf(set *folders.Set) string {
+	if files, _ := set.Files(genes.FolderPersistentDNA); len(files) > 0 {
+		return genes.FolderPersistentDNA.Path
+	}
+
+	return genes.FolderDNA.Path
+}
+
+// persistent says whether the game keeps its characters in
+// common/persistent_dna, whose DNA is written with a priority.
+func (p *portrait) persistent() bool {
+	return p.characterFolder == genes.FolderPersistentDNA.Path
 }

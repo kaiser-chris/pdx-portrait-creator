@@ -15,9 +15,10 @@ import (
 
 // The game stages a portrait in an environment, which lights it, and looks
 // at it through a camera, both of gfx/portraits. The portrait is lit as the
-// environment picked says, environment_standard unless another is, or by the
-// renderer's own studio of lights for none; and seen through the camera
-// picked, or framed freely on the face or the whole figure for none.
+// environment picked says, the one the game's portrait editor starts in
+// unless another is, or by the renderer's own studio of lights for none;
+// graded as the game grades it; and seen through the camera picked, or
+// framed freely on the face or the whole figure for none.
 //
 // An environment's lights stand at places measured from the game's origin,
 // the portrait's feet, and point at bones of the portrait; a camera stands at
@@ -25,10 +26,6 @@ import (
 // frame, so that they follow the bones wherever the portrait's animation
 // takes them. The game's coordinates are the mirror of the renderer's across
 // x.
-
-// defaultEnvironment is the environment a portrait is lit by unless another
-// is picked: the one the game's portrait editor starts in.
-const defaultEnvironment = "environment_standard"
 
 // staging is the environment and the camera of a portrait.
 type staging struct {
@@ -38,6 +35,10 @@ type staging struct {
 	cameras      database.Table[staged.PortraitCamera]
 	settings     staged.Settings
 	set          *folders.Set
+
+	// grading is how the game the folders are grades its portraits; see
+	// grading.go.
+	grading grading
 
 	// environment is the environment picked, empty for the studio, and camera
 	// the camera picked, empty to frame freely. chosen is set once an
@@ -64,6 +65,7 @@ type cubemapRead struct {
 // where the folders still have it; otherwise the default is.
 func (s *staging) prepare(set *folders.Set, environments database.Table[staged.Environment], cameras database.Table[staged.PortraitCamera], settings staged.Settings) {
 	s.set, s.environments, s.cameras, s.settings = set, environments, cameras, settings
+	s.grading = gradingOf(set)
 
 	if s.read == nil {
 		s.read = make(chan cubemapRead, 4)
@@ -72,8 +74,8 @@ func (s *staging) prepare(set *folders.Set, environments database.Table[staged.E
 
 	if !s.chosen || (s.environment != "" && !environments.Has(s.environment)) {
 		s.environment = ""
-		if environments.Has(defaultEnvironment) {
-			s.environment = defaultEnvironment
+		if environments.Has(s.grading.defaultEnvironment) {
+			s.environment = s.grading.defaultEnvironment
 		}
 	}
 
@@ -116,7 +118,7 @@ func (s *staging) lighting(p *portrait) *render.Lighting {
 
 	s.collect(p.renderer)
 
-	lighting := &render.Lighting{EnvironmentIntensity: float32(environment.CubemapIntensity.Or(1)), Exposure: portraitExposure}
+	lighting := &render.Lighting{EnvironmentIntensity: float32(environment.CubemapIntensity.Or(1))}
 
 	if environment.Cubemap != "" {
 		lighting.Environment = s.cubemap(environment.Cubemap)
@@ -167,21 +169,9 @@ func (s *staging) lighting(p *portrait) *render.Lighting {
 	}
 
 	settings := s.settings
+	s.grading.grade(lighting, settings)
 
-	// The games tonemap their portraits by the ACES filmic curve, which they
-	// set in the engine: their pictures match it and not the curve of
-	// John Hable that the settings give, which the rest of the game is drawn
-	// with.
-	lighting.ACES = true
-
-	lighting.ValueScale = float32(settings.ValueScale.Or(1))
-	lighting.SaturationScale = float32(settings.SaturationScale.Or(1))
-
-	if balance, ok := settings.ColorBalance.Get(); ok {
-		lighting.ColorBalance = [3]float32{float32(balance[0]), float32(balance[1]), float32(balance[2])}
-	}
-
-	if ssao, ok := settings.SSAO.Get(); ok && ssao.Enabled {
+	if ssao, ok := settings.SSAO.Get(); ok && ssao.Enabled && s.grading.occludes {
 		lighting.Occlusion = &render.Occlusion{
 			Samples:        ssao.Samples,
 			Radius:         float32(ssao.Radius),
@@ -313,9 +303,3 @@ func mirrored(place [3]float64) [3]float32 {
 func add(a, b [3]float32) [3]float32 {
 	return [3]float32{a[0] + b[0], a[1] + b[1], a[2] + b[2]}
 }
-
-// portraitExposure is the fixed exposure the light of an environment is
-// turned into colours with. The games set theirs in the engine, which ships
-// no file it can be read from; this is fitted to their portrait editor, whose
-// pictures of environment_standard it matches in brightness and colour.
-const portraitExposure = 0.6
