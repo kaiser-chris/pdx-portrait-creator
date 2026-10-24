@@ -323,6 +323,11 @@ func (a *App) categoryRail(counts map[int]int) {
 func (a *App) geneList(changed map[string]bool) {
 	p := a.portrait
 	c := p.character
+
+	// What each morph gene does depends on the sex and the age, which may
+	// have changed since the list was last drawn.
+	c.refreshIdle()
+
 	search := strings.ToLower(strings.TrimSpace(a.state.geneSearch))
 
 	gui.PushStrongFont()

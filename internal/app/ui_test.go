@@ -590,7 +590,7 @@ func agedDecals(t *testing.T, application *App) {
 		}
 	}
 
-	decals := character.decals(portrait.decalTextures)
+	decals := character.decals(portrait.geneTextures)
 
 	laid := map[string]bool{}
 

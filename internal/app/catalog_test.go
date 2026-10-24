@@ -139,31 +139,6 @@ func TestListedCategories(t *testing.T) {
 	}
 }
 
-// A gene that is not drawn says why: its templates set nothing, as Europa
-// Universalis 5's head size, only change a texture, or set attributes no
-// model has.
-func TestIdleReason(t *testing.T) {
-	gene := func(morph genes.Morph) *genes.MorphGene {
-		template := genes.MorphTemplate{Name: "template_1"}
-		template.Sexes[genes.Male] = morph
-
-		return &genes.MorphGene{Templates: []genes.MorphTemplate{template}}
-	}
-
-	for _, test := range []struct {
-		morph genes.Morph
-		want  string
-	}{
-		{genes.Morph{}, idleEmpty},
-		{genes.Morph{TextureOverrides: []genes.TextureOverride{{}}}, idleTexture},
-		{genes.Morph{Settings: []genes.Setting{{Attribute: "head_size"}}}, idleAttributes},
-	} {
-		if got := idleReason(gene(test.morph), genes.Male); got != test.want {
-			t.Errorf("%+v: %q, want %q", test.morph, got, test.want)
-		}
-	}
-}
-
 // A part of the head is listed only where its templates are a choice: the
 // game's single eyes, or Europa Universalis 5's dark and light eyes that draw
 // the same, are not; eyes a mod adds beside them are.

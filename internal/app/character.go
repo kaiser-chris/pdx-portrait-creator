@@ -47,6 +47,12 @@ type character struct {
 	// which may draw the head with other parts, and coloursChanged when a
 	// colour gene has.
 	changed, partsChanged, coloursChanged bool
+
+	// drawable are the attributes that morph the portrait's models, and
+	// idleAt the sex and the age the morph genes were last found to do
+	// something or nothing at; see idle.go.
+	drawable map[string]bool
+	idleAt   idleFor
 }
 
 // morphGene is one morph gene: which of its templates is chosen, and how
@@ -61,14 +67,14 @@ type morphGene struct {
 	category int
 	name     string
 
-	// drawn says whether any template of the gene sets an attribute that
-	// morphs the portrait's models, a blend shape or an additive animation,
-	// or lays a decal over its skin. A gene that only replaces textures,
-	// which are not drawn yet, changes nothing.
+	// drawn says whether any template of the gene does anything the portrait
+	// draws for the character's sex: sets an attribute that morphs its
+	// models, a blend shape or an additive animation, lays a decal over its
+	// skin, replaces the skin's textures or shifts a colour.
 	drawn bool
 
-	// idle says why a gene that is not drawn changes nothing, for the panel
-	// to say; see idleReason.
+	// idle says why the gene changes nothing at the character's sex and
+	// age, for the panel to say, and is empty where it does; see idle.go.
 	idle string
 }
 
@@ -102,7 +108,11 @@ type colourGene struct {
 // sex. drawable are the attributes that morph the portrait's models.
 func newCharacter(all *genes.Genes, sex genes.Sex, dna *genes.DNA, drawable []string) *character {
 	index := newCatalogue()
-	c := &character{all: all, sex: sex, age: defaultAge}
+	c := &character{all: all, sex: sex, age: defaultAge, drawable: map[string]bool{}}
+
+	for _, attribute := range drawable {
+		c.drawable[attribute] = true
+	}
 
 	for _, gene := range all.ColorGenes.All() {
 		category, name := index.place(gene.Key)
@@ -115,19 +125,7 @@ func newCharacter(all *genes.Genes, sex genes.Sex, dna *genes.DNA, drawable []st
 		}
 
 		category, name := index.place(gene.Key)
-		morph := morphGene{gene: gene, value: neutralValue, category: category, name: name, drawn: laysDecals(gene, sex)}
-
-		for _, template := range gene.Templates {
-			for _, setting := range template.For(sex).Settings {
-				morph.drawn = morph.drawn || slices.Contains(drawable, setting.Attribute)
-			}
-		}
-
-		if !morph.drawn {
-			morph.idle = idleReason(gene, sex)
-		}
-
-		c.morphs = append(c.morphs, morph)
+		c.morphs = append(c.morphs, morphGene{gene: gene, value: neutralValue, category: category, name: name})
 	}
 
 	for _, gene := range all.AccessoryGenes.All() {
@@ -147,6 +145,7 @@ func newCharacter(all *genes.Genes, sex genes.Sex, dna *genes.DNA, drawable []st
 	}
 
 	c.reset(dna)
+	c.refreshIdle()
 
 	return c
 }
@@ -484,36 +483,5 @@ func (c *character) resetGene(key string) {
 			c.colours[index].value = basis.colours[index].value
 			c.coloursChanged = true
 		}
-	}
-}
-
-// The reasons a morph gene that is not drawn changes nothing.
-const (
-	idleEmpty      = "Changes nothing: the game's files give it nothing to do"
-	idleTexture    = "Changes nothing drawn yet: a texture"
-	idleAttributes = "Changes nothing: no model has the attributes it sets"
-)
-
-// idleReason says why a morph gene that is not drawn changes nothing for a
-// sex: its templates set nothing at all, as Europa Universalis 5's
-// gene_head_size, whose setting the game's file leaves commented out; they
-// only change textures, which are not drawn yet; or they set attributes no
-// model of the portrait has.
-func idleReason(gene *genes.MorphGene, sex genes.Sex) string {
-	textures, settings := false, false
-
-	for _, template := range gene.Templates {
-		morph := template.For(sex)
-		textures = textures || len(morph.TextureOverrides) > 0 || len(morph.HSVShifts) > 0
-		settings = settings || len(morph.Settings) > 0
-	}
-
-	switch {
-	case textures:
-		return idleTexture
-	case settings:
-		return idleAttributes
-	default:
-		return idleEmpty
 	}
 }

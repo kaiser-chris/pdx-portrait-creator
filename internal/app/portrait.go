@@ -130,11 +130,11 @@ type portrait struct {
 	wantedProps []propSpec
 	props       []hungProp
 
-	// decalTextures are the textures the decals of the genes name, by their
-	// paths, and decalProblem why the decals could last not be laid, so that
-	// it is reported once.
-	decalTextures map[string]*texture.Image
-	decalProblem  string
+	// geneTextures are the textures the decals and texture overrides of the
+	// genes name, by their paths, and decalProblem why the decals could last
+	// not be laid, so that it is reported once.
+	geneTextures map[string]*texture.Image
+	decalProblem string
 
 	// highlight is what the portrait highlights; see highlight.go.
 	highlight highlighting
@@ -395,8 +395,9 @@ func readPortrait(set *folders.Set, sex genes.Sex, dna *genes.DNA, from basis) p
 		result.palettes[what], result.swatches[what] = palette, swatchOf(palette)
 	}
 
-	// The textures of the decals the genes lay over the skin.
-	decals, diagnostics := readDecalTextures(set, result.genes)
+	// The textures of the decals the genes lay over the skin, and of the
+	// texture overrides they draw it with.
+	decals, diagnostics := readGeneTextures(set, result.genes)
 	result.diagnostics = append(result.diagnostics, diagnostics...)
 	result.decals = decals
 
@@ -590,7 +591,7 @@ func (p *portrait) poll() bool {
 		p.characterFolder = result.characterFolder
 		p.modifiers = result.modifiers
 		p.palettes, p.swatches = result.palettes, result.swatches
-		p.decalTextures, p.decalProblem = result.decals, ""
+		p.geneTextures, p.decalProblem = result.decals, ""
 		p.basis = result.basis
 
 		age := int32(defaultAge)
@@ -737,7 +738,9 @@ func (p *portrait) rebuildHead() {
 // each from 0 to 255. A palette that could not be read leaves its colour as
 // the renderer has it. A game whose portrait settings say its palettes are
 // sRGB, as Europa Universalis 5's do, multiplies by the colour in linear
-// light; the others by the colour as it is stored.
+// light; the others by the colour as it is stored. The morph genes shift the
+// colour picked first, by its hue, saturation and value, as they grey the
+// hair of the old.
 func (p *portrait) colour() {
 	look := &p.viewer.Look
 	look.PaletteColor, look.HairColor, look.EyeColor = render.DefaultLook.PaletteColor, render.DefaultLook.HairColor, render.DefaultLook.EyeColor
@@ -749,6 +752,8 @@ func (p *portrait) colour() {
 		}
 
 		if colour, ok := p.palettes[what].Sample(float64(gene.value[0])/maxGeneValue, float64(gene.value[1])/maxGeneValue); ok {
+			colour = render.ShiftHSV(colour, p.character.colourShift(what))
+
 			*target = render.PaletteColour(colour)
 			if p.assembly.SRGBColorPalettes {
 				*target = render.SRGBPaletteColour(colour)
@@ -857,7 +862,8 @@ func (p *portrait) draw() {
 	p.wantProps()
 	p.rebuildHead()
 
-	if p.character.coloursChanged {
+	// The morph genes and the age shift the colours as well.
+	if p.character.coloursChanged || p.character.changed {
 		p.colour()
 		p.character.coloursChanged = false
 
@@ -887,11 +893,18 @@ func (p *portrait) draw() {
 	p.viewer.Draw(p.models()...)
 }
 
-// layDecals lays the decals the genes lay at the portrait's age over the
+// layDecals draws the skin of the head with the texture override the genes
+// pick, and lays the decals the genes lay at the portrait's age over the
 // skin of the body and the head, in the skin colour of the look. A decal
 // that cannot be laid is reported once, and the portrait drawn without it.
+// The games' overrides are all of faces, so they are laid over the head.
 func (p *portrait) layDecals() {
-	decals := p.character.decals(p.decalTextures)
+	decals := p.character.decals(p.geneTextures)
+
+	if err := p.head.OverrideSkin(headPart, p.character.skinOverride(p.geneTextures)); err != nil && err.Error() != p.decalProblem {
+		p.decalProblem = err.Error()
+		warn(err)
+	}
 
 	for _, uploaded := range []*render.Model{p.body, p.head} {
 		err := uploaded.LayDecals(decals, p.viewer.Look)
