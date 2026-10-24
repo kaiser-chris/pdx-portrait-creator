@@ -5,8 +5,8 @@ go 1.26.0
 require (
 	github.com/AllenDang/cimgui-go v1.6.1
 	github.com/gen2brain/raylib-go/raylib v0.60.1
-	github.com/kaiser-chris/pdx-asset-go v0.5.0
-	github.com/kaiser-chris/pdx-parser-go v0.7.1
+	github.com/kaiser-chris/pdx-asset-go v0.6.0
+	github.com/kaiser-chris/pdx-parser-go v0.8.0
 	github.com/ncruces/zenity v0.10.15
 	golang.org/x/image v0.47.0
 )
