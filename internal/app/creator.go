@@ -719,7 +719,15 @@ func (a *App) palettePicker(colour *colourGene, swatch *image.RGBA) (left, width
 	size := imgui.Vec2{X: width, Y: height}
 	origin := imgui.CursorScreenPos()
 
-	imgui.ImageV(a.swatchTexture(swatch), size, imgui.Vec2{}, imgui.Vec2{X: 1, Y: 1})
+	// A game that looks its hair colour up from the other side of the
+	// palette has the palette shown the same way round, so that where the
+	// place is marked is the colour the hair is; see grading.hairColour.
+	from, to := imgui.Vec2{}, imgui.Vec2{X: 1, Y: 1}
+	if colour.gene.Color == "hair" && p.staging.grading.mirroredHair {
+		from.X, to.X = 1, 0
+	}
+
+	imgui.ImageV(a.swatchTexture(swatch), size, from, to)
 	imgui.SetCursorScreenPos(origin)
 	imgui.InvisibleButtonV("##palette", size, imgui.ButtonFlagsMouseButtonLeft)
 

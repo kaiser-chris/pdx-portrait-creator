@@ -751,7 +751,16 @@ func (p *portrait) colour() {
 			continue
 		}
 
-		if colour, ok := p.palettes[what].Sample(float64(gene.value[0])/maxGeneValue, float64(gene.value[1])/maxGeneValue); ok {
+		across, down := float64(gene.value[0])/maxGeneValue, float64(gene.value[1])/maxGeneValue
+
+		lookUp := p.palettes[what].Sample
+		if what == "hair" {
+			lookUp = func(across, down float64) ([4]byte, bool) {
+				return p.staging.grading.hairColour(p.palettes[what], across, down)
+			}
+		}
+
+		if colour, ok := lookUp(across, down); ok {
 			colour = render.ShiftHSV(colour, p.character.colourShift(what))
 
 			*target = render.PaletteColour(colour)

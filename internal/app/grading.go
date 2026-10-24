@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/kaiser-chris/pdx-asset-go/render"
+	"github.com/kaiser-chris/pdx-asset-go/texture"
 	"github.com/kaiser-chris/pdx-parser-go/folders"
 	staged "github.com/kaiser-chris/pdx-parser-go/portrait"
 )
@@ -33,6 +34,10 @@ type grading struct {
 	// occludes says whether the portrait is darkened by the ambient
 	// occlusion the settings ask for.
 	occludes bool
+
+	// mirroredHair says the hair colour is looked up in its palette from
+	// the other side, filtered as a graphics card does; see hairColour.
+	mirroredHair bool
 }
 
 // gradingOf is the grading of the game the folders are.
@@ -49,6 +54,7 @@ var victoria3 = grading{
 	game:               "Victoria 3",
 	defaultEnvironment: "environment_standard",
 	occludes:           true,
+	mirroredHair:       true,
 	grade: func(lighting *render.Lighting, settings staged.Settings) {
 		// The game tonemaps its portraits by the ACES filmic curve, which it
 		// sets in the engine: its pictures match it and not the curve of John
@@ -124,4 +130,24 @@ func restore(lighting *render.Lighting, settings staged.Settings) {
 	if balance, ok := settings.ColorBalance.Get(); ok {
 		lighting.ColorBalance = [3]float32{float32(balance[0]), float32(balance[1]), float32(balance[2])}
 	}
+}
+
+// hairColour looks the hair colour up in its palette where a DNA's two
+// numbers from 0 to 1 point, as the game does.
+//
+// Victoria 3 draws its hair as though it read the palette from the other
+// side, across: in its portrait editor, hair_color at 99 and 97 percent
+// across is a near grey, the colour of the palette's first columns, where
+// its last columns are a deep red, and at 100 percent a warm brown, half the
+// first column and half the last, as a graphics card filtering the palette
+// and wrapping round across it would give. Its eyes are drawn as the palette
+// reads, for the ethnicities write blue eyes at the blue side of the eye
+// palette, and nothing shows its skin to be drawn otherwise. Europa
+// Universalis 5 is not known to do the same, and is read as it is.
+func (g grading) hairColour(palette *texture.Image, across, down float64) ([4]byte, bool) {
+	if g.mirroredHair {
+		return palette.SampleFiltered(1-across, down)
+	}
+
+	return palette.Sample(across, down)
 }
