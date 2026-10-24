@@ -126,6 +126,12 @@ func (a *animating) headChanged(head *model.Model) {
 	_, a.headFiles = statesOf(nil, head)
 }
 
+// bodyChanged is headChanged for a body read again, such as dressed in
+// other clothes.
+func (a *animating) bodyChanged(body *model.Model) {
+	_, a.bodyFiles = statesOf(nil, body)
+}
+
 // restart starts the head and the torso in the states the set picked gives a
 // sex.
 func (a *animating) restart(sex genes.Sex) {

@@ -919,3 +919,92 @@ func TestAnimationProps(t *testing.T) {
 		t.Errorf("with a sabre played and a cane picked, the portrait holds %v, want both", held)
 	}
 }
+
+// waitForRebuild steps the application until the head and the body are no
+// longer being read again.
+func waitForRebuild(t *testing.T, application *App) {
+	t.Helper()
+
+	deadline := time.Now().Add(time.Minute)
+
+	for range 3 {
+		application.Step()
+	}
+
+	for application.portrait.rebuilding {
+		if time.Now().After(deadline) {
+			t.Fatal("the portrait was not read again within a minute")
+		}
+
+		application.Step()
+	}
+
+	application.Step()
+}
+
+// With the game configured, the looks of its clothes dress the portrait: with
+// nothing picked of them, the game's fallback clothes; with another look, the
+// clothes it puts on. The body is read again with them, posed with it, and
+// the picture changes. It is skipped unless PDX_GAME_DIR points at the game.
+func TestLooksDressThePortrait(t *testing.T) {
+	game := os.Getenv("PDX_GAME_DIR")
+	if game == "" {
+		t.Skip("set PDX_GAME_DIR to the game folder to run this test")
+	}
+
+	application, _ := startApp(t, fmt.Sprintf(`{"Folders":[{"Name":"game","Path":%q}],"InterfaceScale":1}`, game))
+	defer application.Close()
+
+	waitForPortrait(t, application)
+	application.state.welcome = false
+
+	portrait := application.portrait
+	portrait.figure = true
+	portrait.frameFigure()
+	waitForRebuild(t, application)
+
+	bare := portrait.viewer.Image()
+
+	clothes, ok := portrait.modifiers.Get("clothes")
+	if !ok || clothes.Fallback == "" {
+		t.Fatalf("the game has no clothes with a fallback: %+v", clothes)
+	}
+
+	dress := func(look string) {
+		portrait.character.looks.pick("clothes", look)
+		portrait.character.partsChanged = true
+		waitForRebuild(t, application)
+	}
+
+	dress("")
+
+	fallback := slices.Clone(portrait.bodyParts)
+	if len(fallback) == 0 {
+		t.Fatalf("in the fallback %s, the body is drawn with %v", clothes.Fallback, fallback)
+	}
+
+	if changed := differingPixels(bare, portrait.viewer.Image()); changed < 1000 {
+		t.Errorf("in the fallback %s, %d pixels changed", clothes.Fallback, changed)
+	}
+
+	// Some look of the first few puts on other clothes than the fallback.
+	tried := 0
+
+	for _, modifier := range clothes.Modifiers {
+		if modifier.Name == clothes.Fallback || len(modifier.Genes) == 0 {
+			continue
+		}
+
+		dress(modifier.Name)
+
+		if len(portrait.bodyParts) > 0 && !slices.Equal(portrait.bodyParts, fallback) {
+			return
+		}
+
+		if tried++; tried == 10 {
+			break
+		}
+	}
+
+	t.Errorf("none of %d looks of the clothes drew other clothes than the fallback's %v", tried, fallback)
+}

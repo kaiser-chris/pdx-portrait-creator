@@ -52,6 +52,19 @@ func (c *character) refreshIdle() {
 	}
 }
 
+// setDrawable sets the attributes that morph the portrait's models, which
+// other models than it was drawn with have other ones of, such as clothes,
+// and has what the genes do worked out again.
+func (c *character) setDrawable(attributes []string) {
+	c.drawable = map[string]bool{}
+
+	for _, attribute := range attributes {
+		c.drawable[attribute] = true
+	}
+
+	c.idleAt = idleFor{}
+}
+
 // does reports whether a gene does anything the portrait draws for a sex, at
 // any age: a template of it sets an attribute a model of the portrait has,
 // lays a decal, replaces the textures of the skin or shifts a colour.

@@ -53,6 +53,12 @@ type character struct {
 	// something or nothing at; see idle.go.
 	drawable map[string]bool
 	idleAt   idleFor
+
+	// looks are the portrait modifiers picked to dress the character in, and
+	// tags the tags what it is drawn with sets, such as shrink_legs under
+	// trousers, which settings of genes require; see looks.go.
+	looks looks
+	tags  []string
 }
 
 // morphGene is one morph gene: which of its templates is chosen, and how
@@ -108,11 +114,8 @@ type colourGene struct {
 // sex. drawable are the attributes that morph the portrait's models.
 func newCharacter(all *genes.Genes, sex genes.Sex, dna *genes.DNA, drawable []string) *character {
 	index := newCatalogue()
-	c := &character{all: all, sex: sex, age: defaultAge, drawable: map[string]bool{}}
-
-	for _, attribute := range drawable {
-		c.drawable[attribute] = true
-	}
+	c := &character{all: all, sex: sex, age: defaultAge}
+	c.setDrawable(drawable)
 
 	for _, gene := range all.ColorGenes.All() {
 		category, name := index.place(gene.Key)
@@ -257,6 +260,10 @@ func (c *character) attributes() map[string]float64 {
 // keys, at another value than they are set to, which is how the portrait is
 // morphed to find what a gene moves.
 func (c *character) attributesWith(keys []string, value int32) map[string]float64 {
+	if c.looks.dressing() {
+		return c.dressedAttributes(keys, value)
+	}
+
 	attributes := map[string]float64{}
 
 	for _, morph := range c.morphs {
@@ -267,6 +274,46 @@ func (c *character) attributesWith(keys []string, value int32) map[string]float6
 
 		template := &morph.gene.Templates[morph.template]
 		c.all.SetAttributes(template.For(c.sex), float64(strength)/maxGeneValue, c.at(), attributes)
+	}
+
+	return attributes
+}
+
+// dressedAttributes are attributesWith for a character dressed in looks: its
+// morph genes as the modifiers leave them, with the settings their tags
+// require made only where the character has them, and the morph genes the
+// modifiers add beside them, such as the shrinking of a body under its
+// clothes.
+func (c *character) dressedAttributes(keys []string, value int32) map[string]float64 {
+	attributes := map[string]float64{}
+	dressed := c.dressed()
+	at := c.at()
+
+	for _, morph := range c.morphs {
+		template, strength := &morph.gene.Templates[morph.template], morph.value
+
+		if allele, ok := dominant(dressed.DNA, morph.gene.Key); ok {
+			if changed, ok := morph.gene.Template(allele.Template); ok {
+				template, strength = changed, int32(allele.Value)
+			}
+		}
+
+		if slices.Contains(keys, morph.gene.Key) {
+			strength = value
+		}
+
+		c.all.SetAttributesTagged(template.For(c.sex), float64(strength)/maxGeneValue, at, c.tags, attributes)
+	}
+
+	for _, added := range dressed.Morphs() {
+		gene, ok := c.all.MorphGene(added.Gene)
+		if !ok {
+			continue
+		}
+
+		if template, ok := gene.Template(added.Template); ok {
+			c.all.SetAttributesTagged(template.For(c.sex), added.Strength, at, c.tags, attributes)
+		}
 	}
 
 	return attributes

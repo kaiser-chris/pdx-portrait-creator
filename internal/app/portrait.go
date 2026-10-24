@@ -113,9 +113,11 @@ type portrait struct {
 	character *character
 	basis     basis
 
-	// parts are the entities the head is drawn with now, and rebuilding is
-	// set while the head is read again with other parts, or props are read.
+	// parts are the entities the head is drawn with now, and bodyParts
+	// those the body is dressed in, and rebuilding is set while the head or
+	// the body is read again with other parts, or props are read.
 	parts      []string
+	bodyParts  []string
 	rebuilding bool
 	heads      chan headResult
 
@@ -228,6 +230,7 @@ type portraitResult struct {
 	settings        staged.Settings
 	body, head      *model.Model
 	parts           []string
+	tags            []string
 	genes           *genes.Genes
 	ethnicities     database.Table[genes.Ethnicity]
 	characters      database.Table[genes.DNA]
@@ -247,6 +250,8 @@ type headResult struct {
 	generation  int
 	head        *model.Model
 	parts       []string
+	body        *model.Model
+	bodyParts   []string
 	props       []loadedProp
 	diagnostics report.Diagnostics
 	err         error
@@ -402,17 +407,19 @@ func readPortrait(set *folders.Set, sex genes.Sex, dna *genes.DNA, from basis) p
 	result.decals = decals
 
 	// The props hung from joints are read once the portrait plays, with
-	// those of its animation; see props.go.
-	parts, _, diagnostics := accessoryParts(result.genes, result.accessories, dna, sex)
+	// those of its animation, and the looks it is dressed in once it is
+	// drawn; see props.go and looks.go.
+	drawn, diagnostics := accessoryParts(result.genes, result.accessories, result.genes.ApplyModifiers(dna, sex), sex)
 	result.diagnostics = append(result.diagnostics, diagnostics...)
+	result.tags = drawn.tags
 
-	head, diagnostics, err := buildHead(loader, built, sex, body, parts)
+	head, diagnostics, err := buildHead(loader, built, sex, body, drawn.head)
 	if err != nil {
 		return portraitResult{err: err}
 	}
 
 	result.diagnostics = append(result.diagnostics, diagnostics...)
-	result.head, result.parts = head, parts
+	result.head, result.parts = head, drawn.head
 
 	return result
 }
@@ -430,52 +437,6 @@ func swatchOf(palette *texture.Image) *image.RGBA {
 	}
 
 	return swatch
-}
-
-// accessoryParts are the entities the accessory genes of a DNA draw, in the
-// order of the genes: those posed with the head, as it is, such as the eyes,
-// the teeth, the hair and the beard; and those hung from a joint, such as a
-// cane the props gene puts in a hand. A gene that picks an accessory that
-// draws nothing, such as no hair, draws nothing; one that picks an accessory
-// that is not there is reported.
-func accessoryParts(all *genes.Genes, accessories database.Table[genes.Accessory], dna *genes.DNA, sex genes.Sex) (parts []string, hung []propSpec, diagnostics report.Diagnostics) {
-	for key, gene := range all.AccessoryGenes.All() {
-		if len(gene.Templates) == 0 || clothing(all, key) {
-			continue
-		}
-
-		templates := byIndex(gene.Templates)
-		template, strength := &templates[0], 0.0
-
-		if allele, ok := dominant(dna, key); ok {
-			if chosen, ok := gene.Template(allele.Template); ok {
-				template, strength = chosen, allele.Strength()
-			}
-		}
-
-		choice, ok := template.For(sex).Pick(strength)
-		if !ok || choice.Accessory == emptyAccessory {
-			continue
-		}
-
-		accessory, ok := accessories.Get(choice.Accessory)
-		if !ok {
-			diagnostics = append(diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "gene " + key, Message: fmt.Sprintf("there is no portrait accessory %s; drawn without it", choice.Accessory)})
-
-			continue
-		}
-
-		chosen, ok := accessory.Choose(nil)
-		switch {
-		case !ok || chosen.Entity == "":
-		case chosen.Node != "":
-			hung = append(hung, propSpec{entity: chosen.Entity, joint: chosen.Node})
-		case chosen.SharedPoseEntity == headPose:
-			parts = append(parts, chosen.Entity)
-		}
-	}
-
-	return parts, hung, diagnostics
 }
 
 // buildHead reads the head of a sex, seats it on the body, and adds the parts
@@ -603,9 +564,19 @@ func (p *portrait) poll() bool {
 			age = ageOf(given)
 		}
 
+		// The looks picked stay picked through another sex or another start,
+		// and the new body is dressed in them as soon as it is drawn.
+		var picked map[string]string
+		if p.character != nil {
+			picked = p.character.looks.picked
+		}
+
 		p.character = newCharacter(result.genes, result.sex, result.dna, append(body.Attributes(), head.Attributes()...))
 		p.character.age = age
-		p.character.partsChanged = false
+		p.character.looks = looks{groups: result.modifiers, picked: picked}
+		p.character.tags = result.tags
+		p.character.partsChanged = p.character.looks.dressing()
+		p.bodyParts = nil
 
 		p.animation.prepare(result.animations, result.assets, result.body, result.head)
 		p.staging.prepare(result.set, result.environments, result.cameras, result.settings)
@@ -640,6 +611,29 @@ func (p *portrait) pollHead() {
 			return
 		}
 
+		// A body dressed in other clothes takes the place of the one drawn,
+		// and the head drawn follows it and meets it at the neck as it did
+		// the old one; a new head does the same below.
+		if result.body != nil {
+			body, err := p.renderer.Upload(result.body)
+			if err != nil {
+				warn(err)
+
+				return
+			}
+
+			p.body.Unload()
+			p.body, p.bodySource, p.bodyParts = body, result.body, result.bodyParts
+			p.head.Follow(p.body, p.assembly.links()...)
+			p.head.Weld(p.body, weldTolerance)
+			p.animation.bodyChanged(result.body)
+			p.animation.restart(p.sex)
+			p.character.setDrawable(append(p.body.Attributes(), p.head.Attributes()...))
+
+			p.character.changed, p.character.coloursChanged = true, true
+			p.highlight.forget()
+		}
+
 		// A head that needed no reading again comes back as nil, with the
 		// props that did.
 		if result.head != nil {
@@ -670,8 +664,9 @@ func (p *portrait) pollHead() {
 }
 
 // rebuildHead reads the head again on a goroutine of its own when the
-// accessory genes pick other parts for it than it is drawn with. While a
-// head is being read, another change waits for it.
+// accessory genes, or the looks the character is dressed in, pick other parts
+// for it than it is drawn with, and the body again when they dress it in
+// other clothes. While they are being read, another change waits for them.
 func (p *portrait) rebuildHead() {
 	if p.rebuilding || p.loader == nil || !p.character.partsChanged {
 		return
@@ -682,12 +677,12 @@ func (p *portrait) rebuildHead() {
 	// The props of the animation are held beside those of the DNA, as the
 	// game holds them: the DNA's are mostly glasses and the like.
 	played := p.played
-	parts, hung, diagnostics := accessoryParts(p.genes, p.accessories, p.character.dna(), p.sex)
-	parts = append(parts, played.head...)
+	drawn, diagnostics := accessoryParts(p.genes, p.accessories, p.character.dressed(), p.sex)
+	parts := append(drawn.head, played.head...)
 	p.wantedProps = nil
 
 	// A prop both give is held once.
-	for _, prop := range append(hung, played.hung...) {
+	for _, prop := range append(drawn.hung, played.hung...) {
 		if !slices.Contains(p.wantedProps, prop) {
 			p.wantedProps = append(p.wantedProps, prop)
 		}
@@ -695,12 +690,20 @@ func (p *portrait) rebuildHead() {
 
 	p.diagnostics = append(p.diagnostics, diagnostics...)
 
+	// Other tags set other settings of the genes, such as the shrinking of
+	// the legs under trousers.
+	if !slices.Equal(drawn.tags, p.character.tags) {
+		p.character.tags = drawn.tags
+		p.character.changed = true
+	}
+
 	// The props are read with the head, since the loader reads one thing at
 	// a time; props no longer wanted are let go of at once.
 	missing := p.missingProps()
 	needHead := !slices.Equal(parts, p.parts)
+	needBody := !slices.Equal(drawn.body, p.bodyParts)
 
-	if !needHead && len(missing) == 0 {
+	if !needHead && !needBody && len(missing) == 0 {
 		p.takeProps(nil)
 
 		return
@@ -712,8 +715,22 @@ func (p *portrait) rebuildHead() {
 	go func() {
 		result := headResult{generation: generation, parts: parts}
 
+		if needBody {
+			result.body, result.diagnostics, result.err = dressBody(loader, built, sex, drawn.body)
+			if result.err != nil {
+				send(p.heads, result)
+
+				return
+			}
+
+			result.bodyParts = drawn.body
+		}
+
 		if needHead {
-			result.head, result.diagnostics, result.err = buildHead(loader, built, sex, body, parts)
+			var diagnostics report.Diagnostics
+
+			result.head, diagnostics, result.err = buildHead(loader, built, sex, body, parts)
+			result.diagnostics = append(result.diagnostics, diagnostics...)
 		}
 
 		for _, prop := range missing {
@@ -733,6 +750,34 @@ func (p *portrait) rebuildHead() {
 	}()
 }
 
+// dressBody reads the body of a sex again, dressed in the parts the looks
+// put on it: each posed with it, as the game draws an accessory whose
+// shared_pose_entity is the torso. A part that cannot be read is reported,
+// and the body dressed without it.
+func dressBody(loader *entity.Loader, built assembly, sex genes.Sex, parts []string) (*model.Model, report.Diagnostics, error) {
+	bodyEntity, _ := built.entities(sex)
+
+	body, diagnostics, err := loader.Load(bodyEntity)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, name := range parts {
+		part, read, err := loader.Load(name)
+		diagnostics = append(diagnostics, read...)
+
+		if err == nil && !body.SharePose(part) {
+			err = errors.New("the body has no skeleton to pose it with")
+		}
+
+		if err != nil {
+			diagnostics = append(diagnostics, report.Diagnostic{Severity: report.SeverityWarning, Subject: "entity " + name, Message: err.Error() + "; drawn without it"})
+		}
+	}
+
+	return body, diagnostics, nil
+}
+
 // colour sets the colours of the skin, the hair and the eyes from the
 // palettes, where the colour genes pick them, as the DNA's two numbers for
 // each from 0 to 255. A palette that could not be read leaves its colour as
@@ -745,13 +790,25 @@ func (p *portrait) colour() {
 	look := &p.viewer.Look
 	look.PaletteColor, look.HairColor, look.EyeColor = render.DefaultLook.PaletteColor, render.DefaultLook.HairColor, render.DefaultLook.EyeColor
 
+	// The looks may move a colour, as a portrait modifier's colour change
+	// does.
+	var dressed *genes.DNA
+	if p.character.looks.dressing() {
+		dressed = p.character.dressed().DNA
+	}
+
 	for what, target := range map[string]*[3]float32{"skin": &look.PaletteColor, "hair": &look.HairColor, "eye": &look.EyeColor} {
 		gene, ok := p.character.colour(what)
 		if !ok {
 			continue
 		}
 
-		across, down := float64(gene.value[0])/maxGeneValue, float64(gene.value[1])/maxGeneValue
+		place := gene.value
+		if allele, ok := dominant(dressed, gene.gene.Key); ok {
+			place = [2]int32{int32(allele.Value), int32(allele.Second)}
+		}
+
+		across, down := float64(place[0])/maxGeneValue, float64(place[1])/maxGeneValue
 
 		lookUp := p.palettes[what].Sample
 		if what == "hair" {
