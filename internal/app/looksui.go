@@ -299,17 +299,7 @@ func (a *App) strengthRows(group *genes.ModifierGroup, l *looks) {
 
 		switch change.Kind {
 		case "accessory":
-			gene, ok := p.genes.AccessoryGenes.Get(change.Gene)
-			if !ok {
-				break
-			}
-
-			template, ok := templateNamed(gene, change.Template)
-			if !ok {
-				break
-			}
-
-			picks := template.For(c.sex).Picks(spread)
+			template, picks := rangePicks(p.genes, change, c.sex)
 			if len(picks) < 2 {
 				break
 			}
@@ -403,6 +393,30 @@ func (a *App) strengthReset(group, element string, change int, picked bool) {
 	}
 
 	imgui.SetItemTooltip("Back to the middle of the range")
+}
+
+// rangePicks are the accessories the range a change of an accessory gene
+// gives can pick for a sex, and the template they are picked from: of the
+// gene's special ones as of the DNA's, such as the shirt and the legwear of
+// Victoria 3's clothes. There are none for a change of no range, or of a gene
+// or a template the genes do not have.
+func rangePicks(all *genes.Genes, change genes.GeneModifier, sex genes.Sex) (*genes.AccessoryTemplate, []genes.Picked) {
+	spread, ok := change.Range.Get()
+	if !ok {
+		return nil, nil
+	}
+
+	gene, ok := all.AccessoryGene(change.Gene)
+	if !ok {
+		return nil, nil
+	}
+
+	template, ok := templateNamed(gene, change.Template)
+	if !ok {
+		return nil, nil
+	}
+
+	return template, template.For(sex).Picks(spread)
 }
 
 // templateNamed is a template of an accessory gene by its name.

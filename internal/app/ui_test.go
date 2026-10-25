@@ -17,6 +17,7 @@ import (
 	"github.com/AllenDang/cimgui-go/imgui"
 
 	"github.com/kaiser-chris/pdx-asset-go/render"
+	"github.com/kaiser-chris/pdx-parser-go/database"
 	"github.com/kaiser-chris/pdx-parser-go/genes"
 
 	"github.com/kaiser-chris/pdx-portrait-creator/internal/gui"
@@ -944,7 +945,8 @@ func waitForRebuild(t *testing.T, application *App) {
 
 // With the game configured, the looks of its clothes dress the portrait: with
 // nothing picked of them, none of its clothes; with the game's fallback
-// picked, its clothes; with another look, the clothes it puts on. The body is
+// picked, its clothes, where it has any; with another look, other clothes than
+// the fallback's. The body is
 // read again with them, posed with it, and the picture changes. It is skipped
 // unless PDX_GAME_DIR points at the game.
 func TestLooksDressThePortrait(t *testing.T) {
@@ -991,13 +993,14 @@ func TestLooksDressThePortrait(t *testing.T) {
 
 	dress(clothes.Fallback)
 
+	// Victoria 3's fallback dresses a character in its default clothes;
+	// Europa Universalis 5's is no clothes at all, its template no_clothes,
+	// which draws none.
 	fallback := slices.Clone(portrait.bodyParts)
-	if len(fallback) == 0 {
-		t.Fatalf("in the fallback %s, the body is drawn with %v", clothes.Fallback, fallback)
-	}
-
-	if changed := differingPixels(bare, portrait.viewer.Image()); changed < 1000 {
-		t.Errorf("in the fallback %s, %d pixels changed", clothes.Fallback, changed)
+	if len(fallback) > 0 {
+		if changed := differingPixels(bare, portrait.viewer.Image()); changed < 1000 {
+			t.Errorf("in the fallback %s, %d pixels changed", clothes.Fallback, changed)
+		}
 	}
 
 	// Some look of the first few puts on other clothes than the fallback.
@@ -1085,5 +1088,69 @@ func TestLooksLayAWound(t *testing.T) {
 		if err := writePNG(filepath.Join(dir, "wound.png"), portrait.viewer.Image()); err != nil {
 			t.Error(err)
 		}
+	}
+}
+
+// With the game configured, a range an element of the clothes gives one of
+// the special accessory genes over the whole of it, as Bhagat Singh's clothes
+// give Victoria 3's shirt and legwear, picks among every accessory of the
+// template, which the Portrait Modifiers window lists to pick one of. It is
+// skipped unless PDX_GAME_DIR points at a game with such a range of a
+// template of several accessories: Europa Universalis 5's hold one each.
+func TestRangesOfSpecialGenesPick(t *testing.T) {
+	game := os.Getenv("PDX_GAME_DIR")
+	if game == "" {
+		t.Skip("set PDX_GAME_DIR to the game folder to run this test")
+	}
+
+	application, _ := startApp(t, fmt.Sprintf(`{"Folders":[{"Name":"game","Path":%q}],"InterfaceScale":1}`, game))
+	defer application.Close()
+
+	waitForPortrait(t, application)
+
+	portrait := application.portrait
+
+	clothes, ok := portrait.character.looks.group("clothes")
+	if !ok {
+		t.Skip("the game has no clothes")
+	}
+
+	checked := 0
+
+	for _, element := range clothes.Modifiers {
+		for _, change := range element.Genes {
+			_, special := portrait.genes.SpecialAccessoryGenes.Get(change.Gene)
+			if !special || change.Range != database.Some(genes.Range{Min: 0, Max: 1}) {
+				continue
+			}
+
+			template, picks := rangePicks(portrait.genes, change, genes.Male)
+			if template == nil {
+				t.Errorf("%s: the %s template %s is not found", element.Name, change.Gene, change.Template)
+
+				continue
+			}
+
+			weighted := 0
+			for _, choice := range template.For(genes.Male).Choices {
+				if choice.Weight > 0 {
+					weighted++
+				}
+			}
+
+			if weighted < 2 {
+				continue
+			}
+
+			checked++
+
+			if len(picks) != weighted {
+				t.Errorf("%s: the range of %s %s picks %d of its %d accessories", element.Name, change.Gene, change.Template, len(picks), weighted)
+			}
+		}
+	}
+
+	if checked == 0 {
+		t.Skip("the game's clothes give no special accessory gene of several accessories a whole range")
 	}
 }

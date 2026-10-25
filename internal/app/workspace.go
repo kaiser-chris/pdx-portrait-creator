@@ -715,7 +715,9 @@ func strengthFields(change *genes.GeneModifier, field func(string)) bool {
 	return changed
 }
 
-// geneKeys are the keys of the genes of a kind, in order.
+// geneKeys are the keys of the genes of a kind, in order: the special genes
+// among them, such as Victoria 3's shirt and legwear, which portrait
+// modifiers change though no DNA does.
 func (a *App) geneKeys(kind string) []string {
 	all := a.portrait.genes
 
@@ -723,9 +725,9 @@ func (a *App) geneKeys(kind string) []string {
 
 	switch kind {
 	case "accessory":
-		keys = all.AccessoryGenes.Keys()
+		keys = append(all.AccessoryGenes.Keys(), all.SpecialAccessoryGenes.Keys()...)
 	case "morph":
-		keys = all.MorphGenes.Keys()
+		keys = append(all.MorphGenes.Keys(), all.SpecialMorphGenes.Keys()...)
 	case "color":
 		keys = all.ColorGenes.Keys()
 	}
@@ -744,14 +746,14 @@ func (a *App) templateNames(kind, key string) []string {
 
 	switch kind {
 	case "accessory":
-		if gene, ok := all.AccessoryGenes.Get(key); ok {
+		if gene, ok := all.AccessoryGene(key); ok {
 			for _, template := range gene.Templates {
 				names = append(names, template.Name)
 			}
 		}
 
 	case "morph":
-		if gene, ok := all.MorphGenes.Get(key); ok {
+		if gene, ok := all.MorphGene(key); ok {
 			for _, template := range gene.Templates {
 				names = append(names, template.Name)
 			}
