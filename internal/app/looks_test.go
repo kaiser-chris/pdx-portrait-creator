@@ -91,3 +91,37 @@ func TestLooksDressInThePicked(t *testing.T) {
 		t.Errorf("with no clothes picked = %v, want the fallback", got)
 	}
 }
+
+// A strength picked within the range an element gives a gene takes the place
+// of the range, for that element alone, and the element as the game reads it
+// keeps its range.
+func TestLooksPickAStrengthWithinARange(t *testing.T) {
+	collector := &report.Collector{}
+	table := genes.ReadModifiers(script.Parse(`
+clothes = {
+	usage = game
+	coat = { dna_modifiers = { accessory = { mode = add gene = outfits template = coats range = { 0 1 } } } }
+	cape = { dna_modifiers = { accessory = { mode = add gene = outfits template = capes range = { 0 1 } } } }
+}
+`), folders.File{Relative: "gfx/portraits/portrait_modifiers/test.txt", Path: "test.txt", Source: "test"}, collector)
+
+	l := looks{groups: groupList(table), on: true}
+	l.pick("clothes", "coat")
+	l.setStrength("clothes", "coat", 0, 0.9)
+	l.setStrength("clothes", "cape", 0, 0.1)
+
+	drawn := l.modifiers()
+	if len(drawn) != 1 || drawn[0].Genes[0].Value != database.Some(0.9) || drawn[0].Genes[0].Range.Set {
+		t.Fatalf("the coat is drawn with %+v, want the strength 0.9 in the place of its range", drawn)
+	}
+
+	if clothes, _ := table.Get("clothes"); !clothes.Modifiers[0].Genes[0].Range.Set {
+		t.Error("the coat as the game reads it lost its range")
+	}
+
+	l.unsetStrength("clothes", "coat", 0)
+
+	if drawn := l.modifiers(); !drawn[0].Genes[0].Range.Set {
+		t.Errorf("unset, the coat is drawn with %+v, want its range again", drawn[0].Genes[0])
+	}
+}

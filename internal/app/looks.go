@@ -45,6 +45,66 @@ type looks struct {
 	// only draws the character in the modifiers of one group alone, by its
 	// key, as the project's workspace does to show one element by itself.
 	only string
+
+	// strengths are the strengths picked within the ranges the elements give
+	// the genes they change, by the group and the element, and then by the
+	// place of the change: the game picks one of a range by chance, and the
+	// middle of it is drawn where none is picked.
+	strengths map[string]map[int]float64
+}
+
+// strengthKey is what the strengths of an element of a group are kept by.
+func strengthKey(group, element string) string {
+	return group + "/" + element
+}
+
+// strength is the strength picked for a change of an element, if one is.
+func (l *looks) strength(group, element string, change int) (float64, bool) {
+	value, ok := l.strengths[strengthKey(group, element)][change]
+
+	return value, ok
+}
+
+// setStrength picks a strength within the range a change of an element
+// gives.
+func (l *looks) setStrength(group, element string, change int, value float64) {
+	if l.strengths == nil {
+		l.strengths = map[string]map[int]float64{}
+	}
+
+	key := strengthKey(group, element)
+	if l.strengths[key] == nil {
+		l.strengths[key] = map[int]float64{}
+	}
+
+	l.strengths[key][change] = value
+}
+
+// unsetStrength draws a change of an element at the middle of its range
+// again.
+func (l *looks) unsetStrength(group, element string, change int) {
+	delete(l.strengths[strengthKey(group, element)], change)
+}
+
+// withStrengths is a modifier with the strengths picked for it: a copy in
+// which each change picked a strength of gives that strength in the place of
+// its range, or the modifier itself where none is picked.
+func (l *looks) withStrengths(group string, modifier *genes.PortraitModifier) *genes.PortraitModifier {
+	picked := l.strengths[strengthKey(group, modifier.Name)]
+	if len(picked) == 0 {
+		return modifier
+	}
+
+	copied := *modifier
+	copied.Genes = slices.Clone(modifier.Genes)
+
+	for change, value := range picked {
+		if change < len(copied.Genes) && copied.Genes[change].Range.Set {
+			copied.Genes[change].Value, copied.Genes[change].Range = database.Some(value), database.Opt[genes.Range]{}
+		}
+	}
+
+	return &copied
 }
 
 // groupList is a table of groups as the list looks are given.
@@ -178,7 +238,7 @@ func (l *looks) modifiers() []*genes.PortraitModifier {
 
 	for _, group := range groups {
 		if modifier, ok := l.choice(group); ok {
-			modifiers = append(modifiers, modifier)
+			modifiers = append(modifiers, l.withStrengths(group.Key, modifier))
 		}
 	}
 

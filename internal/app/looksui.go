@@ -175,7 +175,17 @@ func (a *App) looksTable(groups []*genes.ModifierGroup) {
 	state := &a.state.looks
 	search := strings.ToLower(strings.TrimSpace(state.search))
 
-	flags := imgui.TableFlagsRowBg | imgui.TableFlagsBordersInnerH | imgui.TableFlagsScrollY | imgui.TableFlagsSizingStretchProp
+	// Some breathing room between the rows, as the folders of the settings
+	// have. Dear ImGui reads the padding row by row, so it stays pushed until
+	// the table ends.
+	padding := imgui.CurrentStyle().CellPadding()
+	imgui.PushStyleVarVec2(imgui.StyleVarCellPadding, imgui.Vec2{X: padding.X, Y: gui.Scaled(3)})
+	defer imgui.PopStyleVar()
+
+	// Without outer borders Dear ImGui leaves the outer edges unpadded, which
+	// puts the first column flush against the edge while every other one is
+	// indented, so the padding is asked for.
+	flags := imgui.TableFlagsRowBg | imgui.TableFlagsBordersInnerH | imgui.TableFlagsScrollY | imgui.TableFlagsSizingStretchProp | imgui.TableFlagsPadOuterX
 	height := -imgui.TextLineHeightWithSpacing() * 3
 
 	if !imgui.BeginTableV("##looks", 3, flags, imgui.Vec2{Y: height}, 0) {
@@ -236,6 +246,8 @@ func (a *App) looksTable(groups []*genes.ModifierGroup) {
 			imgui.SetItemTooltip("Back to what the game would dress the character in")
 		}
 
+		a.strengthRows(group, l)
+
 		imgui.PopID()
 	}
 
@@ -247,6 +259,143 @@ func (a *App) looksTable(groups []*genes.ModifierGroup) {
 		l.try(triedGroup, tried)
 		p.character.redress()
 	}
+}
+
+// strengthRows are a row under a group for every change of the element it is
+// drawn with that gives a gene a range, rather than one strength, to pick the
+// strength of: the accessory it dresses the character in, out of those the
+// range can pick, or how strong a morph is within it. The game picks one by
+// chance; the middle of the range is drawn until one is picked. A range that
+// can pick only one accessory, and a change for another sex, have none.
+func (a *App) strengthRows(group *genes.ModifierGroup, l *looks) {
+	p := a.portrait
+	c := p.character
+
+	element, ok := l.choice(group)
+	if !ok {
+		return
+	}
+
+	for index, change := range element.Genes {
+		spread, ranged := change.Range.Get()
+		if !ranged || change.Type != "" && change.Type != c.sex.String() {
+			continue
+		}
+
+		value, picked := l.strength(group.Key, element.Name, index)
+		if !picked {
+			value = change.Strength()
+		}
+
+		imgui.PushIDInt(int32(index))
+
+		switch change.Kind {
+		case "accessory":
+			gene, ok := p.genes.AccessoryGenes.Get(change.Gene)
+			if !ok {
+				break
+			}
+
+			template, ok := templateNamed(gene, change.Template)
+			if !ok {
+				break
+			}
+
+			picks := template.For(c.sex).Picks(spread)
+			if len(picks) < 2 {
+				break
+			}
+
+			a.strengthLabel(change.Gene)
+
+			current, _ := template.For(c.sex).Pick(value)
+			imgui.SetNextItemWidth(-1)
+
+			if imgui.BeginComboV("##strength", accessoryLabel(current.Accessory), imgui.ComboFlagsHeightLarge) {
+				for at, choice := range picks {
+					if imgui.SelectableBoolV(fmt.Sprintf("%s##%d", accessoryLabel(choice.Accessory), at), choice.Choice == current, 0, imgui.Vec2{}) {
+						l.setStrength(group.Key, element.Name, index, choice.At(0.5))
+						c.redress()
+					}
+				}
+
+				imgui.EndCombo()
+			}
+
+			imgui.SetItemTooltip(fmt.Sprintf("The game picks one of these %d by chance", len(picks)))
+			a.strengthReset(group.Key, element.Name, index, picked)
+
+		case "morph":
+			if spread.Min == spread.Max {
+				break
+			}
+
+			a.strengthLabel(change.Gene)
+
+			shown := float32(value)
+			imgui.SetNextItemWidth(-1)
+
+			if imgui.SliderFloatV("##strength", &shown, float32(min(spread.Min, spread.Max)), float32(max(spread.Min, spread.Max)), "%.2f", imgui.SliderFlagsAlwaysClamp) {
+				l.setStrength(group.Key, element.Name, index, float64(shown))
+				c.redress()
+			}
+
+			imgui.SetItemTooltip(fmt.Sprintf("The game picks a strength from %s to %s by chance", formatNumber(spread.Min), formatNumber(spread.Max)))
+			a.strengthReset(group.Key, element.Name, index, picked)
+		}
+
+		imgui.PopID()
+	}
+}
+
+// strengthLabel starts a row of a strength, under the group's own, with the
+// gene it is the strength of.
+func (a *App) strengthLabel(gene string) {
+	imgui.TableNextRow()
+	imgui.TableNextColumn()
+	imgui.Indent()
+	imgui.AlignTextToFramePadding()
+	imgui.TextDisabled(gene)
+	imgui.Unindent()
+	imgui.TableNextColumn()
+}
+
+// strengthReset ends a row of a strength with a way back to the middle of
+// its range, where one is picked.
+func (a *App) strengthReset(group, element string, change int, picked bool) {
+	imgui.TableNextColumn()
+
+	if !picked {
+		return
+	}
+
+	if imgui.Button(gui.IconReset) {
+		a.portrait.character.looks.unsetStrength(group, element, change)
+		a.portrait.character.redress()
+	}
+
+	imgui.SetItemTooltip("Back to the middle of the range")
+}
+
+// templateNamed is a template of an accessory gene by its name.
+func templateNamed(gene *genes.AccessoryGene, name string) (*genes.AccessoryTemplate, bool) {
+	for index := range gene.Templates {
+		if gene.Templates[index].Name == name {
+			return &gene.Templates[index], true
+		}
+	}
+
+	return nil, false
+}
+
+// accessoryLabel is what a list calls an accessory a template picks: its
+// name, or nothing for the empty one the files write for none.
+func accessoryLabel(accessory string) string {
+	if accessory == "" || accessory == emptyAccessory {
+		return "nothing"
+	}
+
+	return accessory
 }
 
 // matchesGroup reports whether a group's key, or the name of one of its
