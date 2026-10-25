@@ -286,23 +286,53 @@ func (c *character) attributesWith(keys []string, value int32) map[string]float6
 // clothes.
 func (c *character) dressedAttributes(keys []string, value int32) map[string]float64 {
 	attributes := map[string]float64{}
-	dressed := c.dressed()
 	at := c.at()
 
+	for _, morph := range c.drawnMorphs() {
+		strength := morph.strength
+		if !morph.added && slices.Contains(keys, morph.gene.Key) {
+			strength = float64(value) / maxGeneValue
+		}
+
+		c.all.SetAttributesTagged(morph.template.For(c.sex), strength, at, c.tags, attributes)
+	}
+
+	return attributes
+}
+
+// drawnMorph is a morph gene as the portrait is drawn with it: its template
+// and its strength from 0 to 1, and whether a portrait modifier added it
+// beside the DNA's genes.
+type drawnMorph struct {
+	gene     *genes.MorphGene
+	template *genes.MorphTemplate
+	strength float64
+	added    bool
+}
+
+// drawnMorphs are the morph genes the portrait is drawn with: the DNA's, as
+// the portrait modifiers it is dressed in leave them, and the genes they add
+// beside them, special genes among them, such as the decals of a wound. They
+// are what lays the decals, replaces the skin's textures and shifts the
+// colours, as well as what morphs the models.
+func (c *character) drawnMorphs() []drawnMorph {
+	drawn := make([]drawnMorph, 0, len(c.morphs))
+
+	var dressed genes.Dressed
+	if c.looks.dressing() {
+		dressed = c.dressed()
+	}
+
 	for _, morph := range c.morphs {
-		template, strength := &morph.gene.Templates[morph.template], morph.value
+		template, strength := &morph.gene.Templates[morph.template], float64(morph.value)/maxGeneValue
 
 		if allele, ok := dominant(dressed.DNA, morph.gene.Key); ok {
 			if changed, ok := morph.gene.Template(allele.Template); ok {
-				template, strength = changed, int32(allele.Value)
+				template, strength = changed, float64(allele.Value)/maxGeneValue
 			}
 		}
 
-		if slices.Contains(keys, morph.gene.Key) {
-			strength = value
-		}
-
-		c.all.SetAttributesTagged(template.For(c.sex), float64(strength)/maxGeneValue, at, c.tags, attributes)
+		drawn = append(drawn, drawnMorph{gene: morph.gene, template: template, strength: strength})
 	}
 
 	for _, added := range dressed.Morphs() {
@@ -312,11 +342,11 @@ func (c *character) dressedAttributes(keys []string, value int32) map[string]flo
 		}
 
 		if template, ok := gene.Template(added.Template); ok {
-			c.all.SetAttributesTagged(template.For(c.sex), added.Strength, at, c.tags, attributes)
+			drawn = append(drawn, drawnMorph{gene: gene, template: template, strength: added.Strength, added: true})
 		}
 	}
 
-	return attributes
+	return drawn
 }
 
 // picked is the accessory an accessory gene picks as it is set, and false

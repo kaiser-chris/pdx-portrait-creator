@@ -1021,3 +1021,69 @@ func TestLooksDressThePortrait(t *testing.T) {
 
 	t.Errorf("none of %d looks of the clothes drew other clothes than the fallback's %v", tried, fallback)
 }
+
+// With a game whose portrait modifiers lay the decals of a wound, as the
+// special_decals of Victoria 3's newer files do, dressing the portrait in one
+// lays its decal over the face: the special gene the modifier adds, at a
+// value of 0, lays its decal wholly, and the picture changes. It is skipped
+// unless PDX_GAME_DIR points at such a game.
+func TestLooksLayAWound(t *testing.T) {
+	game := os.Getenv("PDX_GAME_DIR")
+	if game == "" {
+		t.Skip("set PDX_GAME_DIR to the game folder to run this test")
+	}
+
+	application, _ := startApp(t, fmt.Sprintf(`{"Folders":[{"Name":"game","Path":%q}],"InterfaceScale":1}`, game))
+	defer application.Close()
+
+	waitForPortrait(t, application)
+	application.state.welcome = false
+
+	portrait := application.portrait
+
+	decals, ok := portrait.character.looks.group("special_decals")
+	if !ok {
+		t.Skip("the game's portrait modifiers lay no decals")
+	}
+
+	wound := ""
+	for _, modifier := range decals.Modifiers {
+		if modifier.Name != decals.Fallback && len(modifier.Genes) > 0 {
+			wound = modifier.Name
+
+			break
+		}
+	}
+
+	waitForRebuild(t, application)
+	bare := portrait.viewer.Image()
+
+	laid := len(portrait.character.decals(portrait.geneTextures))
+
+	portrait.character.looks.on = true
+	portrait.character.looks.pick("special_decals", wound)
+	portrait.character.redress()
+	waitForRebuild(t, application)
+
+	if got := len(portrait.character.decals(portrait.geneTextures)); got <= laid {
+		t.Errorf("dressed in %s, %d decals are laid, want more than the %d of the DNA", wound, got, laid)
+	}
+
+	// The decals the modifier adds are laid after the DNA's own, with the
+	// textures they name.
+	for _, decal := range portrait.character.decals(portrait.geneTextures)[laid:] {
+		if decal.Diffuse == nil {
+			t.Errorf("a decal of %s is laid without its texture", wound)
+		}
+	}
+
+	if changed := differingPixels(bare, portrait.viewer.Image()); changed < 200 {
+		t.Errorf("dressed in %s, %d pixels changed", wound, changed)
+	}
+
+	if dir := os.Getenv("PDX_SHOTS_DIR"); dir != "" {
+		if err := writePNG(filepath.Join(dir, "wound.png"), portrait.viewer.Image()); err != nil {
+			t.Error(err)
+		}
+	}
+}

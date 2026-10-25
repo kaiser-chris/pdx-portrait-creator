@@ -5,6 +5,7 @@ import (
 
 	"github.com/kaiser-chris/pdx-asset-go/render"
 	"github.com/kaiser-chris/pdx-asset-go/texture"
+	"github.com/kaiser-chris/pdx-parser-go/database"
 	"github.com/kaiser-chris/pdx-parser-go/folders"
 	"github.com/kaiser-chris/pdx-parser-go/genes"
 	"github.com/kaiser-chris/pdx-parser-go/report"
@@ -58,26 +59,30 @@ func readGeneTextures(set *folders.Set, all *genes.Genes) (map[string]*texture.I
 		textures[path] = image
 	}
 
-	for _, gene := range all.MorphGenes.All() {
-		for index := range gene.Templates {
-			for _, sex := range genes.Sexes {
-				morph := gene.Templates[index].For(sex)
+	// The special genes lay decals too, where a portrait modifier adds one,
+	// such as the decals of a wound.
+	for _, table := range []database.Table[genes.MorphGene]{all.MorphGenes, all.SpecialMorphGenes} {
+		for _, gene := range table.All() {
+			for index := range gene.Templates {
+				for _, sex := range genes.Sexes {
+					morph := gene.Templates[index].For(sex)
 
-				for _, decal := range morph.Decals {
-					for _, mode := range []string{decal.BlendModes.Diffuse, decal.BlendModes.Normal, decal.BlendModes.Properties} {
-						if _, ok := render.ParseBlendMode(mode); mode != "" && !ok {
-							note("gene "+gene.Key, fmt.Sprintf("a decal is blended by %s, which is not overlay, replace, hard_light or multiply; laid as an overlay", mode))
+					for _, decal := range morph.Decals {
+						for _, mode := range []string{decal.BlendModes.Diffuse, decal.BlendModes.Normal, decal.BlendModes.Properties} {
+							if _, ok := render.ParseBlendMode(mode); mode != "" && !ok {
+								note("gene "+gene.Key, fmt.Sprintf("a decal is blended by %s, which is not overlay, replace, hard_light or multiply; laid as an overlay", mode))
+							}
+						}
+
+						for _, path := range []string{decal.Textures.Diffuse, decal.Textures.Normal, decal.Textures.Properties} {
+							read(gene, path, "its decal is laid without it")
 						}
 					}
 
-					for _, path := range []string{decal.Textures.Diffuse, decal.Textures.Normal, decal.Textures.Properties} {
-						read(gene, path, "its decal is laid without it")
-					}
-				}
-
-				for _, override := range morph.TextureOverrides {
-					for _, path := range []string{override.Diffuse, override.Normal, overrideProperties(override)} {
-						read(gene, path, "the skin keeps its own map in its place")
+					for _, override := range morph.TextureOverrides {
+						for _, path := range []string{override.Diffuse, override.Normal, overrideProperties(override)} {
+							read(gene, path, "the skin keeps its own map in its place")
+						}
 					}
 				}
 			}
@@ -110,8 +115,8 @@ func (c *character) skinOverride(textures map[string]*texture.Image) render.Skin
 		maps   render.SkinMaps
 	)
 
-	for _, morph := range c.morphs {
-		overrides := morph.gene.Templates[morph.template].For(c.sex).TextureOverrides
+	for _, morph := range c.drawnMorphs() {
+		overrides := morph.template.For(c.sex).TextureOverrides
 
 		for index := range overrides {
 			if chosen == nil || overrides[index].Weight > chosen.Weight {
@@ -135,9 +140,8 @@ func (c *character) colourShift(colour string) [3]float64 {
 
 	at := c.at()
 
-	for _, morph := range c.morphs {
-		template := &morph.gene.Templates[morph.template]
-		shift := c.all.HSVShift(template.For(c.sex), colour, float64(morph.value)/maxGeneValue, at)
+	for _, morph := range c.drawnMorphs() {
+		shift := c.all.HSVShift(morph.template.For(c.sex), colour, morph.strength, at)
 
 		for channel := range total {
 			total[channel] += shift[channel]
@@ -167,14 +171,13 @@ func (c *character) decals(textures map[string]*texture.Image) []render.Decal {
 
 	at := c.at()
 
-	for _, morph := range c.morphs {
-		template := &morph.gene.Templates[morph.template]
-		strength := float64(morph.value) / maxGeneValue
+	for _, morph := range c.drawnMorphs() {
+		template := morph.template
 
 		for index := range template.For(c.sex).Decals {
 			decal := &template.For(c.sex).Decals[index]
 
-			weight := c.all.DecalAlpha(decal, strength, at)
+			weight := c.all.DecalAlpha(decal, morph.strength, at)
 			if weight <= 0 {
 				continue
 			}
