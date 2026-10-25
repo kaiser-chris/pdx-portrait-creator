@@ -93,10 +93,23 @@ type state struct {
 	// workspace is what the windows of a portrait modifier project remember;
 	// see workspace.go.
 	workspace workspaceState
+
+	// ethnicityBoxes outlines on the palettes where the ethnicity picks its
+	// colours from.
+	ethnicityBoxes bool
+
+	// selectCharacter is how many frames more the character panel is
+	// brought to the front of the tabs it shares: making a character starts
+	// with its DNA, and the Portrait Modifiers window beside it comes later.
+	selectCharacter int
 }
 
+// selectFrames is how many frames the character panel is brought forward
+// for, which outlasts a window appearing beside it.
+const selectFrames = 3
+
 func newState(settings *config.Settings) state {
-	current := state{status: "Ready", welcome: true}
+	current := state{status: "Ready", welcome: true, ethnicityBoxes: true, selectCharacter: selectFrames}
 
 	current.loadFrom(settings)
 

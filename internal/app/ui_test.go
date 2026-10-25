@@ -943,9 +943,10 @@ func waitForRebuild(t *testing.T, application *App) {
 }
 
 // With the game configured, the looks of its clothes dress the portrait: with
-// nothing picked of them, the game's fallback clothes; with another look, the
-// clothes it puts on. The body is read again with them, posed with it, and
-// the picture changes. It is skipped unless PDX_GAME_DIR points at the game.
+// nothing picked of them, none of its clothes; with the game's fallback
+// picked, its clothes; with another look, the clothes it puts on. The body is
+// read again with them, posed with it, and the picture changes. It is skipped
+// unless PDX_GAME_DIR points at the game.
 func TestLooksDressThePortrait(t *testing.T) {
 	game := os.Getenv("PDX_GAME_DIR")
 	if game == "" {
@@ -983,6 +984,12 @@ func TestLooksDressThePortrait(t *testing.T) {
 	}
 
 	dress("")
+
+	if len(portrait.bodyParts) > 0 {
+		t.Errorf("with no clothes picked, the body is drawn with %v", portrait.bodyParts)
+	}
+
+	dress(clothes.Fallback)
 
 	fallback := slices.Clone(portrait.bodyParts)
 	if len(fallback) == 0 {

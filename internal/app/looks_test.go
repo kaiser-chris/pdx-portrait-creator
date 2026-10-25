@@ -59,9 +59,9 @@ func names(modifiers []*genes.PortraitModifier) []string {
 
 // Until dressing is turned on the portrait is not dressed, whatever is
 // picked; once it is, every group the game picks from on its own dresses it
-// in the look picked, its fallback, or the modifier it always applies, in the
-// order of their priorities, and a group set to nothing draws nothing but its
-// fallback.
+// in the look picked, or the modifier it always applies, in the order of
+// their priorities. A group nothing is picked of draws nothing, even one
+// with a fallback, which is drawn only where it is picked.
 func TestLooksDressInThePicked(t *testing.T) {
 	l := looks{groups: groupList(lookGroups(t))}
 
@@ -73,8 +73,8 @@ func TestLooksDressInThePicked(t *testing.T) {
 
 	l.on = true
 
-	if got := names(l.modifiers()); len(got) != 3 || got[0] != "shrink_body" || got[1] != "default_clothes" || got[2] != "top_hat" {
-		t.Errorf("with a hat = %v, want the body shrunk, the fallback clothes and the hat, by priority", got)
+	if got := names(l.modifiers()); len(got) != 2 || got[0] != "shrink_body" || got[1] != "top_hat" {
+		t.Errorf("with a hat = %v, want the body shrunk and the hat, by priority, and no fallback clothes", got)
 	}
 
 	l.pick("clothes", "coat")
@@ -87,8 +87,14 @@ func TestLooksDressInThePicked(t *testing.T) {
 
 	l.pick("clothes", "")
 
+	if got := names(l.modifiers()); len(got) != 0 {
+		t.Errorf("with no clothes picked = %v, want nothing", got)
+	}
+
+	l.pick("clothes", "default_clothes")
+
 	if got := names(l.modifiers()); len(got) != 1 || got[0] != "default_clothes" {
-		t.Errorf("with no clothes picked = %v, want the fallback", got)
+		t.Errorf("with the fallback picked = %v, want the fallback", got)
 	}
 }
 

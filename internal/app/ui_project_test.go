@@ -10,17 +10,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AllenDang/cimgui-go/imgui"
+
 	"github.com/kaiser-chris/pdx-parser-go/genes"
 	"github.com/kaiser-chris/pdx-parser-go/script"
 
 	"github.com/kaiser-chris/pdx-portrait-creator/internal/gui"
 )
 
-// active reports whether a window was drawn in the last frame.
+// active reports whether a window was drawn in the last frame, and shown: a
+// window docked behind the tab of another is drawn but hidden.
 func active(name string) bool {
 	window, ok := gui.FindWindow(name)
 
-	return ok && window.WasActive()
+	return ok && window.WasActive() && !window.Hidden()
 }
 
 // With the game configured, a portrait modifier project takes the place of
@@ -52,7 +55,9 @@ func TestPortraitModifierProject(t *testing.T) {
 	preview, _ := gui.FindWindow(panelPreview)
 	wide := preview.Size().X
 
-	if !active(panelCharacter) || active(panelProject) || active(panelElement) {
+	// The character panel is the tab shown of those beside it, rather than
+	// the Portrait Modifiers window, which is a later step.
+	if !active(panelCharacter) || active(panelLooks) || active(panelProject) || active(panelElement) {
 		t.Error("making a character, the character panel is not the one drawn")
 	}
 
@@ -187,6 +192,11 @@ func TestPortraitModifierWindowsDraw(t *testing.T) {
 	application.state.welcome = false
 	application.portrait.character.looks.on = true
 	application.portrait.character.redress()
+	waitForRebuild(t, application)
+
+	// The window is a tab behind the character panel, which is brought
+	// forward as a click on its tab would.
+	imgui.SetWindowFocusStr(panelLooks)
 	waitForRebuild(t, application)
 
 	if !active(panelLooks) {

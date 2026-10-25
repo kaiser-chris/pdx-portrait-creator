@@ -250,6 +250,16 @@ func (a *App) characterPanel() {
 		return
 	}
 
+	// Making a character starts with its DNA, so the panel is the tab shown
+	// of those it shares once the portrait is, rather than whichever was
+	// shown last. A dock node shows the tab of a window that appears in it,
+	// as the Portrait Modifiers window does on coming back from a project,
+	// so the panel is brought forward for a few frames, until that settles.
+	if a.state.selectCharacter > 0 && !a.hidden() {
+		a.state.selectCharacter--
+		imgui.SetNextWindowFocus()
+	}
+
 	defer imgui.End()
 
 	if !imgui.Begin(panelCharacter) {
@@ -652,6 +662,14 @@ func (a *App) colourList(changed map[string]bool) {
 	p := a.portrait
 	c := p.character
 
+	// The boxes the ethnicity picks its colours from can be hidden, to see
+	// the palettes plain.
+	if p.basis.ethnicity != nil {
+		imgui.Checkbox("Show ethnicity ranges", &a.state.ethnicityBoxes)
+		imgui.SetItemTooltip("Outline the boxes of the palettes the ethnicity " + p.basis.key + " picks the colours of its characters from, each by its weight")
+		rowGap()
+	}
+
 	for _, what := range []string{"skin", "hair", "eye"} {
 		colour, ok := c.colour(what)
 		if !ok {
@@ -753,23 +771,32 @@ func (a *App) palettePicker(colour *colourGene, swatch *image.RGBA) (left, width
 		}
 	}
 
-	imgui.SetItemTooltip("Click or drag to pick the colour")
-
 	draw := imgui.WindowDrawList()
 	at := func(u, v float64) imgui.Vec2 {
 		return imgui.Vec2{X: origin.X + float32(u)*width, Y: origin.Y + float32(v)*height}
 	}
 
 	// The ethnicity picks its colours from these rectangles, each by its
-	// weight.
-	if p.basis.ethnicity != nil {
+	// weight, which pointing at one says, while they are shown.
+	var boxes []genes.ColorChoice
+	if p.basis.ethnicity != nil && a.state.ethnicityBoxes {
 		if colours, ok := p.basis.ethnicity.Color(colour.gene.Key); ok {
-			outline := imgui.ColorConvertFloat4ToU32(imgui.Vec4{X: 1, Y: 1, Z: 1, W: 0.55})
-
-			for _, choice := range colours.Choices {
-				draw.AddRectV(at(choice.From[0], choice.From[1]), at(choice.To[0], choice.To[1]), outline, 0, gui.Scaled(1), 0)
-			}
+			boxes = colours.Choices
 		}
+	}
+
+	outline := imgui.ColorConvertFloat4ToU32(imgui.Vec4{X: 1, Y: 1, Z: 1, W: 0.55})
+	for _, choice := range boxes {
+		draw.AddRectV(at(choice.From[0], choice.From[1]), at(choice.To[0], choice.To[1]), outline, 0, gui.Scaled(1), 0)
+	}
+
+	if imgui.IsItemHovered() {
+		mouse := imgui.MousePos()
+		tip := paletteTooltip(p.basis.key, boxes, float64((mouse.X-origin.X)/width), float64((mouse.Y-origin.Y)/height))
+
+		// Dear ImGui reads a tooltip as a format, in which a percent sign
+		// starts a verb, so the percentages are written doubled.
+		imgui.SetTooltip(strings.ReplaceAll(tip, "%", "%%"))
 	}
 
 	marker := at(float64(colour.value[0])/maxGeneValue, float64(colour.value[1])/maxGeneValue)
@@ -777,6 +804,35 @@ func (a *App) palettePicker(colour *colourGene, swatch *image.RGBA) (left, width
 	draw.AddCircleV(marker, gui.Scaled(6), imgui.ColorConvertFloat4ToU32(imgui.Vec4{X: 1, Y: 1, Z: 1, W: 1}), 0, gui.Scaled(1.5))
 
 	return left, width
+}
+
+// paletteTooltip is what pointing at a palette says: how to pick a colour,
+// and, at a place inside the boxes the ethnicity outlines, how often the
+// ethnicity picks its colour from each box there.
+func paletteTooltip(ethnicity string, boxes []genes.ColorChoice, u, v float64) string {
+	lines := []string{"Click or drag to pick the colour"}
+
+	total := 0
+	for _, box := range boxes {
+		total += max(box.Weight, 0)
+	}
+
+	for _, box := range boxes {
+		low := [2]float64{min(box.From[0], box.To[0]), min(box.From[1], box.To[1])}
+		high := [2]float64{max(box.From[0], box.To[0]), max(box.From[1], box.To[1])}
+
+		if u < low[0] || u > high[0] || v < low[1] || v > high[1] || total == 0 {
+			continue
+		}
+
+		lines = append(lines, fmt.Sprintf("The ethnicity %s picks its colour from this box %.0f%% of the time", ethnicity, float64(max(box.Weight, 0))*100/float64(total)))
+	}
+
+	if len(lines) == 1 && len(boxes) > 0 {
+		lines = append(lines, fmt.Sprintf("The boxes are where the ethnicity %s picks its colour from", ethnicity))
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // swatchTexture is a palette uploaded for the interface to draw, uploaded the

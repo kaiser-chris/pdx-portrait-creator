@@ -13,9 +13,11 @@ import (
 // picks one modifier of each group for a character by weights it works out
 // from the character, which the creator does not: the person using it picks
 // one of each group themselves, or none, and the portrait is drawn dressed in
-// what they picked. A group with a fallback, such as clothes, is drawn in its
-// fallback where nothing is picked, as the game draws a character none of
-// whose modifiers it can pick.
+// what they picked. A group nothing is picked of is drawn with none of its
+// elements, even one with a fallback, such as clothes, which the game draws a
+// character in where it can pick none of the others: the fallback is one of
+// the elements to pick, so that the character is seen in nothing but what was
+// picked.
 //
 // Dressing the character is a later step of making one, to see it in the
 // game's clothes once its DNA is done, so it is off until it is turned on in
@@ -29,7 +31,7 @@ const usageGame = "game"
 
 // looks are the groups of portrait modifiers, whether the character is
 // dressed in them, and the modifier picked of each, by the group's key; an
-// empty name picks nothing of a group with no fallback.
+// empty name picks nothing of the group.
 type looks struct {
 	// groups are the groups as they are drawn: the game's, and those a
 	// project changes or makes in their place; see project.go.
@@ -160,20 +162,15 @@ func (l *looks) group(key string) (*genes.ModifierGroup, bool) {
 }
 
 // choice is the modifier a group is drawn with: the one tried on, or the one
-// picked; its fallback where nothing is picked and it has one; and for a
-// group nothing was ever picked of, the first modifier the game considers
-// for every character alike, at a weight above nothing that no condition
-// changes, as it always shrinks a body under its clothes by
-// special_shrink_body. It reports false where the group is drawn with
-// nothing.
+// picked; and for a group nothing was ever picked of, the first modifier the
+// game considers for every character alike, at a weight above nothing that
+// no condition changes, as it always shrinks a body under its clothes by
+// special_shrink_body. Its fallback is drawn only where it is picked. It
+// reports false where the group is drawn with nothing.
 func (l *looks) choice(group *genes.ModifierGroup) (*genes.PortraitModifier, bool) {
 	name, touched := l.picked[group.Key]
 	if l.tryingGroup == group.Key {
 		name, touched = l.trying, true
-	}
-
-	if name == "" {
-		name = group.Fallback
 	}
 
 	if name == "" && !touched {
@@ -190,8 +187,15 @@ func (l *looks) choice(group *genes.ModifierGroup) (*genes.PortraitModifier, boo
 }
 
 // alwaysApplied is the first modifier of a group the game applies to every
-// character alike: at a weight above nothing that no condition changes.
+// character alike: at a weight above nothing that no condition changes, in a
+// group without a fallback. A group with one, such as clothes, is one of
+// looks to pick from, of which none is drawn until one is picked, even where
+// its fallback is weighed alike for every character.
 func alwaysApplied(group *genes.ModifierGroup) (*genes.PortraitModifier, bool) {
+	if group.Fallback != "" {
+		return nil, false
+	}
+
 	for index := range group.Modifiers {
 		if weight, ok := group.Modifiers[index].Weight.Get(); ok && weight.Unconditional() && weight.Base.Or(0) > 0 {
 			return &group.Modifiers[index], true

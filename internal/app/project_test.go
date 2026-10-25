@@ -317,10 +317,31 @@ func TestLooksTryOnAndShowAlone(t *testing.T) {
 	l.only = ""
 	l.stopTrying()
 
-	if got := names(l.modifiers()); strings.Join(got, " ") != "shrink_body default_clothes" {
-		t.Errorf("stopped trying = %v, want the fallback back", got)
+	if got := names(l.modifiers()); strings.Join(got, " ") != "shrink_body" {
+		t.Errorf("stopped trying = %v, want the body shrunk alone, and no fallback", got)
 	}
 }
 
 // byteOrderMark is what the games' files start with.
 const byteOrderMark = "\xef\xbb\xbf"
+
+// Pointing inside a box of the ethnicity's says how often it picks its colour
+// from there, and pointing elsewhere says what the boxes are.
+func TestPaletteTooltip(t *testing.T) {
+	boxes := []genes.ColorChoice{
+		{Weight: 3, From: [2]float64{0, 0}, To: [2]float64{0.5, 0.5}},
+		{Weight: 1, From: [2]float64{0.6, 0.6}, To: [2]float64{0.4, 0.4}},
+	}
+
+	if got := paletteTooltip("caucasian", boxes, 0.45, 0.45); !strings.Contains(got, "75% of the time") || !strings.Contains(got, "25% of the time") {
+		t.Errorf("where the boxes overlap: %q, want both of them", got)
+	}
+
+	if got := paletteTooltip("caucasian", boxes, 0.9, 0.9); !strings.Contains(got, "The boxes are where the ethnicity caucasian picks its colour from") {
+		t.Errorf("outside the boxes: %q", got)
+	}
+
+	if got := paletteTooltip("caucasian", nil, 0.1, 0.1); got != "Click or drag to pick the colour" {
+		t.Errorf("without boxes: %q", got)
+	}
+}

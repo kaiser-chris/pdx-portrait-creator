@@ -131,13 +131,23 @@ func (a *App) looksPanel() {
 		imgui.SetItemTooltip("Show the groups the game marks gruesome, such as plagues and scars")
 	}
 
-	a.looksTable(shown)
-
+	// The notes go under the table, which takes the room that leaves, so
+	// that the window has nothing to scroll but the table.
+	notes := []string{"To change portrait modifiers or make new ones, start a portrait modifier project from File > New Portrait."}
 	if hidden > 0 {
-		dimmedWrapped(fmt.Sprintf("%d with usage = none are only worn where script names them, as animations name their props.", hidden))
+		notes = append([]string{fmt.Sprintf("%d with usage = none are only worn where script names them, as animations name their props.", hidden)}, notes...)
 	}
 
-	dimmedWrapped("To change portrait modifiers or make new ones, start a portrait modifier project from File > New Portrait.")
+	footer := float32(0)
+	for _, note := range notes {
+		footer += imgui.CalcTextSizeV(note, false, imgui.ContentRegionAvail().X).Y + style.ItemSpacing().Y
+	}
+
+	a.looksTable(shown, footer)
+
+	for _, note := range notes {
+		dimmedWrapped(note)
+	}
 }
 
 // listedGroups are the groups the window lists, those the game picks from
@@ -168,8 +178,9 @@ func countGruesome(groups []*genes.ModifierGroup) int {
 }
 
 // looksTable lists the groups that pass the filter, each with its element to
-// pick and a way back to the game's own.
-func (a *App) looksTable(groups []*genes.ModifierGroup) {
+// pick and a way back to none, in the height of the window the footer under
+// it leaves.
+func (a *App) looksTable(groups []*genes.ModifierGroup, footer float32) {
 	p := a.portrait
 	l := &p.character.looks
 	state := &a.state.looks
@@ -186,15 +197,12 @@ func (a *App) looksTable(groups []*genes.ModifierGroup) {
 	// puts the first column flush against the edge while every other one is
 	// indented, so the padding is asked for.
 	flags := imgui.TableFlagsRowBg | imgui.TableFlagsBordersInnerH | imgui.TableFlagsScrollY | imgui.TableFlagsSizingStretchProp | imgui.TableFlagsPadOuterX
-	height := -imgui.TextLineHeightWithSpacing() * 3
-
-	if !imgui.BeginTableV("##looks", 3, flags, imgui.Vec2{Y: height}, 0) {
+	if !imgui.BeginTableV("##looks", 2, flags, imgui.Vec2{Y: -max(footer, 1)}, 0) {
 		return
 	}
 
 	imgui.TableSetupColumnV("Portrait modifier", imgui.TableColumnFlagsWidthStretch, 0.45, 0)
 	imgui.TableSetupColumnV("Element", imgui.TableColumnFlagsWidthStretch, 0.55, 0)
-	imgui.TableSetupColumnV("##reset", imgui.TableColumnFlagsWidthFixed, imgui.FrameHeight(), 0)
 	imgui.TableSetupScrollFreeze(0, 1)
 	imgui.TableHeadersRow()
 
@@ -227,7 +235,7 @@ func (a *App) looksTable(groups []*genes.ModifierGroup) {
 
 		imgui.TableNextColumn()
 
-		if name, ok, pointed := a.elementCombo(group, l); ok {
+		if name, ok, pointed := a.elementCombo(group, l, comboWidth(isPicked)); ok {
 			l.pick(group.Key, name)
 			l.stopTrying()
 			p.character.redress()
@@ -235,15 +243,15 @@ func (a *App) looksTable(groups []*genes.ModifierGroup) {
 			tried, triedGroup = pointed, group.Key
 		}
 
-		imgui.TableNextColumn()
-
 		if isPicked {
+			imgui.SameLine()
+
 			if imgui.Button(gui.IconReset) {
 				l.unpick(group.Key)
 				p.character.redress()
 			}
 
-			imgui.SetItemTooltip("Back to what the game would dress the character in")
+			imgui.SetItemTooltip("Back to what the game would dress the character in untouched")
 		}
 
 		a.strengthRows(group, l)
@@ -309,7 +317,7 @@ func (a *App) strengthRows(group *genes.ModifierGroup, l *looks) {
 			a.strengthLabel(change.Gene)
 
 			current, _ := template.For(c.sex).Pick(value)
-			imgui.SetNextItemWidth(-1)
+			imgui.SetNextItemWidth(comboWidth(picked))
 
 			if imgui.BeginComboV("##strength", accessoryLabel(current.Accessory), imgui.ComboFlagsHeightLarge) {
 				for at, choice := range picks {
@@ -333,7 +341,7 @@ func (a *App) strengthRows(group *genes.ModifierGroup, l *looks) {
 			a.strengthLabel(change.Gene)
 
 			shown := float32(value)
-			imgui.SetNextItemWidth(-1)
+			imgui.SetNextItemWidth(comboWidth(picked))
 
 			if imgui.SliderFloatV("##strength", &shown, float32(min(spread.Min, spread.Max)), float32(max(spread.Min, spread.Max)), "%.2f", imgui.SliderFlagsAlwaysClamp) {
 				l.setStrength(group.Key, element.Name, index, float64(shown))
@@ -350,9 +358,29 @@ func (a *App) strengthRows(group *genes.ModifierGroup, l *looks) {
 
 // strengthLabel starts a row of a strength, under the group's own, with the
 // gene it is the strength of.
+//
+// The room the row is indented by holds a line from the group's row above,
+// turning towards the gene, as a tree draws a branch, to say that the row
+// belongs to the group's.
 func (a *App) strengthLabel(gene string) {
 	imgui.TableNextRow()
 	imgui.TableNextColumn()
+
+	origin := imgui.CursorScreenPos()
+	indent := imgui.CurrentStyle().IndentSpacing()
+	padding := imgui.CurrentStyle().CellPadding().Y
+
+	branch := origin.X + indent*0.45
+	turn := origin.Y + imgui.FrameHeight()/2
+	colour := imgui.ColorConvertFloat4ToU32(*imgui.StyleColorVec4(imgui.ColTextDisabled))
+	thickness := gui.Scaled(1)
+
+	// The lines are thin rectangles, which keep their thickness at every
+	// scale of the interface.
+	draw := imgui.WindowDrawList()
+	draw.AddRectFilled(imgui.Vec2{X: branch, Y: origin.Y - padding*2}, imgui.Vec2{X: branch + thickness, Y: turn + thickness}, colour)
+	draw.AddRectFilled(imgui.Vec2{X: branch, Y: turn}, imgui.Vec2{X: origin.X + indent - gui.Scaled(3), Y: turn + thickness}, colour)
+
 	imgui.Indent()
 	imgui.AlignTextToFramePadding()
 	imgui.TextDisabled(gene)
@@ -361,13 +389,13 @@ func (a *App) strengthLabel(gene string) {
 }
 
 // strengthReset ends a row of a strength with a way back to the middle of
-// its range, where one is picked.
+// its range, beside its list, where one is picked.
 func (a *App) strengthReset(group, element string, change int, picked bool) {
-	imgui.TableNextColumn()
-
 	if !picked {
 		return
 	}
+
+	imgui.SameLine()
 
 	if imgui.Button(gui.IconReset) {
 		a.portrait.character.looks.unsetStrength(group, element, change)
@@ -398,6 +426,18 @@ func accessoryLabel(accessory string) string {
 	return accessory
 }
 
+// comboWidth is how wide a list of the Element column is: all of it, or what
+// a reset button beside it leaves.
+func comboWidth(reset bool) float32 {
+	if !reset {
+		return -1
+	}
+
+	style := imgui.CurrentStyle()
+
+	return imgui.ContentRegionAvail().X - imgui.CalcTextSize(gui.IconReset).X - style.FramePadding().X*2 - style.ItemSpacing().X
+}
+
 // matchesGroup reports whether a group's key, or the name of one of its
 // elements, holds a search.
 func matchesGroup(group *genes.ModifierGroup, search string) bool {
@@ -422,8 +462,6 @@ func shownChoice(group *genes.ModifierGroup, l *looks) (name, why string) {
 	switch {
 	case picked != "":
 		return picked, ""
-	case group.Fallback != "":
-		return group.Fallback, "fallback"
 	case !touched:
 		if modifier, ok := alwaysApplied(group); ok {
 			return modifier.Name, "always applied"
@@ -437,7 +475,7 @@ func shownChoice(group *genes.ModifierGroup, l *looks) (name, why string) {
 // search above it, as the list of a gene's templates has: the clothes of
 // Victoria 3 have hundreds. It reports the element picked, when one is, and
 // otherwise the one pointed at, to try on.
-func (a *App) elementCombo(group *genes.ModifierGroup, l *looks) (picked string, ok bool, pointed string) {
+func (a *App) elementCombo(group *genes.ModifierGroup, l *looks, width float32) (picked string, ok bool, pointed string) {
 	name, why := shownChoice(group, l)
 
 	preview := name
@@ -445,7 +483,7 @@ func (a *App) elementCombo(group *genes.ModifierGroup, l *looks) (picked string,
 		preview = fmt.Sprintf("%s (%s)", name, why)
 	}
 
-	imgui.SetNextItemWidth(-1)
+	imgui.SetNextItemWidth(width)
 
 	if !imgui.BeginComboV("##element", preview, imgui.ComboFlagsHeightLarge) {
 		return "", false, ""
@@ -475,14 +513,7 @@ func (a *App) elementCombo(group *genes.ModifierGroup, l *looks) (picked string,
 		return names[shown[0]], true, ""
 	}
 
-	none := "None"
-	if group.Fallback != "" {
-		none = "None: draws the fallback " + group.Fallback
-	}
-
-	current, touched := l.picked[group.Key]
-
-	if imgui.SelectableBoolV(none+"##none", touched && current == "", 0, imgui.Vec2{}) {
+	if imgui.SelectableBoolV("None##none", why == "" && name == "none", 0, imgui.Vec2{}) {
 		return "", true, ""
 	}
 
@@ -499,7 +530,14 @@ func (a *App) elementCombo(group *genes.ModifierGroup, l *looks) (picked string,
 
 		// The games' files name an element twice now and then, as Europa
 		// Universalis 5's neckware does, so each is told apart by its place.
-		if imgui.SelectableBoolV(fmt.Sprintf("%s##%d", element, position), element == name, 0, imgui.Vec2{}) {
+		// The fallback is said to be one, which the game dresses a character
+		// in where it can pick none of the others.
+		label := element
+		if element == group.Fallback {
+			label += " (fallback)"
+		}
+
+		if imgui.SelectableBoolV(fmt.Sprintf("%s##%d", label, position), element == name, 0, imgui.Vec2{}) {
 			picked, ok = element, true
 			imgui.CloseCurrentPopup()
 		}

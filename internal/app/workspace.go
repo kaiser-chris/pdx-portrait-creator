@@ -69,6 +69,9 @@ func (a *App) setMode(mode workflow) {
 	}
 
 	a.state.mode = mode
+	if mode == modeCharacter {
+		a.state.selectCharacter = selectFrames
+	}
 }
 
 // syncLooks gives the looks the groups as the project draws them, and in a
