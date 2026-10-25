@@ -70,6 +70,10 @@ func TestPortraitModifierProject(t *testing.T) {
 		t.Fatal("in a project, its windows are not the ones drawn")
 	}
 
+	if !portrait.figure {
+		t.Error("a project frames the face, want the whole figure")
+	}
+
 	// The DNA of the base and what it wears are tabs beside the portrait
 	// modifiers, which are the tab shown.
 	for _, tab := range []string{panelBaseDNA, panelWear} {
@@ -205,6 +209,10 @@ func TestPortraitModifierProject(t *testing.T) {
 
 	if !active(panelCharacter) || active(panelProject) || active(panelElement) {
 		t.Error("back in making a character, the character panel is not the one drawn")
+	}
+
+	if portrait.figure {
+		t.Error("back in making a character, the whole figure is framed, want the face it had")
 	}
 
 	if preview, _ := gui.FindWindow(panelPreview); preview.Size().X < wide-1 {

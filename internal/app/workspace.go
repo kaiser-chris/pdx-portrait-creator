@@ -71,6 +71,21 @@ func (a *App) setMode(mode workflow) {
 		p.character.redress()
 	}
 
+	// A project shows the whole figure, the clothes it is mostly about from
+	// head to toe, or the upper body Europa Universalis 5's portraits have,
+	// rather than the face a character is made by; the character's view is
+	// kept for coming back to it.
+	if p := a.portrait; p != nil {
+		if mode == modeModifiers {
+			a.state.characterView = portraitView{figure: p.figure, camera: p.staging.camera}
+			p.figure, p.staging.camera = true, ""
+		} else {
+			p.figure, p.staging.camera = a.state.characterView.figure, a.state.characterView.camera
+		}
+
+		p.framing = true
+	}
+
 	a.state.mode = mode
 	if mode == modeCharacter {
 		a.state.selectCharacter = selectFrames

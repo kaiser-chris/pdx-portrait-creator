@@ -84,8 +84,10 @@ type state struct {
 	mode, welcomeMode workflow
 
 	// characterLooks are the looks of the character being made, kept while
-	// a portrait modifier project dresses the base its own way.
+	// a portrait modifier project dresses the base its own way, and
+	// characterView how its portrait was looked at.
 	characterLooks looks
+	characterView  portraitView
 
 	// looks is what the Portrait Modifiers window remembers; see looksui.go.
 	looks lookState
@@ -115,6 +117,13 @@ type state struct {
 // selectFrames is how many frames the character panel is brought forward
 // for, which outlasts a window appearing beside it.
 const selectFrames = 3
+
+// portraitView is how the portrait is looked at: framed as the whole figure
+// or as the face, or through a camera of the game's, by its key.
+type portraitView struct {
+	figure bool
+	camera string
+}
 
 func newState(settings *config.Settings) state {
 	current := state{status: "Ready", welcome: true, ethnicityBoxes: true, selectCharacter: selectFrames}
