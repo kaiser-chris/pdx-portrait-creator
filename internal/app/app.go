@@ -231,6 +231,8 @@ func (a *App) frame() {
 	a.characterPanel()
 	a.looksPanel()
 	a.projectPanel()
+	a.wearPanel()
+	a.baseDNAPanel()
 	a.elementPanel()
 	a.weightWindow()
 	a.newElementPopup()

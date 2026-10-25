@@ -298,8 +298,9 @@ func TestSaveStart(t *testing.T) {
 }
 
 // Looks try an element on in the place of the one picked until they stop,
-// and show one group alone where asked to.
-func TestLooksTryOnAndShowAlone(t *testing.T) {
+// and draw the element a project edits, even of a group the game only uses
+// where script names it.
+func TestLooksTryOnAndEdit(t *testing.T) {
 	l := looks{groups: groupList(lookGroups(t)), on: true}
 
 	l.try("clothes", "coat")
@@ -308,13 +309,13 @@ func TestLooksTryOnAndShowAlone(t *testing.T) {
 		t.Errorf("trying the coat on = %v, want the body shrunk and the coat", got)
 	}
 
-	l.only = "clothes"
+	l.editingGroup, l.editing = "animations_props", "saber"
 
-	if got := names(l.modifiers()); strings.Join(got, " ") != "coat" {
-		t.Errorf("the clothes alone = %v, want the coat", got)
+	if got := names(l.modifiers()); strings.Join(got, " ") != "saber shrink_body coat" {
+		t.Errorf("editing the saber = %v, want it with the rest", got)
 	}
 
-	l.only = ""
+	l.editingGroup, l.editing = "", ""
 	l.stopTrying()
 
 	if got := names(l.modifiers()); strings.Join(got, " ") != "shrink_body" {
@@ -343,5 +344,20 @@ func TestPaletteTooltip(t *testing.T) {
 
 	if got := paletteTooltip("caucasian", nil, 0.1, 0.1); got != "Click or drag to pick the colour" {
 		t.Errorf("without boxes: %q", got)
+	}
+}
+
+// A value adds or replaces a strength from 0 to 1, modify adds to the DNA's
+// one either way, and modify_multiply multiplies it.
+func TestValueBounds(t *testing.T) {
+	for mode, want := range map[string][2]float32{
+		genes.ModifierAdd:            {0, 1},
+		genes.ModifierReplace:        {0, 1},
+		genes.ModifierModify:         {-1, 1},
+		genes.ModifierModifyMultiply: {0, 2},
+	} {
+		if low, high := valueBounds(mode); low != want[0] || high != want[1] {
+			t.Errorf("%s takes values from %v to %v, want %v", mode, low, high, want)
+		}
 	}
 }

@@ -290,7 +290,7 @@ func (a *App) strengthRows(group *genes.ModifierGroup, l *looks) {
 			continue
 		}
 
-		value, picked := l.strength(group.Key, element.Name, index)
+		value, picked := l.strength(group.Key, element.Name, index, spread)
 		if !picked {
 			value = change.Strength()
 		}
@@ -309,15 +309,9 @@ func (a *App) strengthRows(group *genes.ModifierGroup, l *looks) {
 			current, _ := template.For(c.sex).Pick(value)
 			imgui.SetNextItemWidth(comboWidth(picked))
 
-			if imgui.BeginComboV("##strength", accessoryLabel(current.Accessory), imgui.ComboFlagsHeightLarge) {
-				for at, choice := range picks {
-					if imgui.SelectableBoolV(fmt.Sprintf("%s##%d", accessoryLabel(choice.Accessory), at), choice.Choice == current, 0, imgui.Vec2{}) {
-						l.setStrength(group.Key, element.Name, index, choice.At(0.5))
-						c.redress()
-					}
-				}
-
-				imgui.EndCombo()
+			if choice, ok := accessoryCombo("##strength", current, picks); ok {
+				l.setStrength(group.Key, element.Name, index, choice.At(0.5))
+				c.redress()
 			}
 
 			imgui.SetItemTooltip(fmt.Sprintf("The game picks one of these %d by chance", len(picks)))

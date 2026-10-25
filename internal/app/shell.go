@@ -19,8 +19,10 @@ const (
 	panelLooks     = "Portrait Modifiers###looks"
 
 	// The windows of a portrait modifier project; see workspace.go.
-	panelProject = "Portrait Modifiers###project"
+	panelProject = "Modifiers###project"
 	panelElement = "Element###element"
+	panelBaseDNA = "DNA###projectdna"
+	panelWear    = "Worn With###projectwear"
 	windowWeight = "Weight###weight"
 
 	windowSettings = "Settings"
@@ -72,24 +74,40 @@ func (a *App) buildDefaultLayout(dockSpaceID imgui.ID) {
 // window for no direction, or in a split of that window's node to the side a
 // direction says, which ratio of the node takes. A window shown before, or
 // one whose neighbour has never been, is left where it is.
-func (a *App) dockFirstTime(name, beside string, side imgui.Dir, ratio float32) {
+//
+// It reports false while the window is better not drawn yet: its neighbour
+// is there but not docked yet, as a window docked by a split of another only
+// is from the frame after, and drawing the window now would leave it
+// floating. That is waited for a few frames, and no more, since a neighbour
+// can be undocked for good.
+func (a *App) dockFirstTime(name, beside string, side imgui.Dir, ratio float32) bool {
 	if _, ok := gui.FindWindow(name); ok {
-		return
+		return true
 	}
 
 	if settings := imgui.InternalFindWindowSettingsByID(imgui.InternalImHashStr(name)); settings != nil && settings.CData != nil {
-		return
+		return true
 	}
 
 	neighbour, ok := gui.FindWindow(beside)
-	if !ok || neighbour.DockId() == 0 {
-		return
+	if !ok {
+		return true
+	}
+
+	if neighbour.DockId() == 0 {
+		if a.state.dockWaits == nil {
+			a.state.dockWaits = map[string]int{}
+		}
+
+		a.state.dockWaits[name]++
+
+		return a.state.dockWaits[name] > dockWaitFrames
 	}
 
 	if side == imgui.DirNone {
 		imgui.SetNextWindowDockIDV(neighbour.DockId(), imgui.CondFirstUseEver)
 
-		return
+		return true
 	}
 
 	var at, rest imgui.ID
@@ -97,7 +115,13 @@ func (a *App) dockFirstTime(name, beside string, side imgui.Dir, ratio float32) 
 	imgui.InternalDockBuilderSplitNode(neighbour.DockId(), side, ratio, &at, &rest)
 	imgui.InternalDockBuilderDockWindow(name, at)
 	imgui.InternalDockBuilderFinish(neighbour.DockId())
+
+	return true
 }
+
+// dockWaitFrames is how many frames a window waits for its neighbour to be
+// docked before it is drawn where it is.
+const dockWaitFrames = 3
 
 func (a *App) menuBar() {
 	if !imgui.BeginMainMenuBar() {

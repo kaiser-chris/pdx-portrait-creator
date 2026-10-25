@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 
@@ -14,11 +15,13 @@ import (
 )
 
 // The workspace of a portrait modifier project has windows of its own in the
-// place of the character panel: the Portrait Modifiers window on the left,
-// which lists the groups and the elements of the one picked, the Element
-// window on the right, which edits the element picked, and the Weight window,
-// which shows when the game uses it. The portrait in the middle wears the
-// element picked, on a base the bar over it swaps for another.
+// place of the character panel: on the left the Modifiers window, which lists
+// the groups and the elements of the one picked, with the Worn With tab, which
+// picks what the base wears of the other groups, and the DNA tab, which
+// changes the base to try them on; the Element window on the right, which
+// edits the element picked; and the Weight window, which shows when the game
+// uses it. The portrait in the middle wears the element picked, on a base the
+// bar over it swaps for another.
 
 // workflow is what the windows are for.
 type workflow int
@@ -71,12 +74,14 @@ func (a *App) setMode(mode workflow) {
 	a.state.mode = mode
 	if mode == modeCharacter {
 		a.state.selectCharacter = selectFrames
+	} else {
+		a.state.selectProject = selectFrames
 	}
 }
 
 // syncLooks gives the looks the groups as the project draws them, and in a
-// project dresses the base in the element picked: alone, or with the other
-// groups as the game would dress it.
+// project dresses the base in the element picked, with what the Worn With tab
+// picks of the other groups.
 func (a *App) syncLooks() {
 	p := a.portrait
 	if p == nil || p.character == nil {
@@ -92,21 +97,15 @@ func (a *App) syncLooks() {
 
 	pr := a.project
 
-	only := ""
-	if !pr.wearOthers {
-		only = pr.group
-	}
-
-	if !l.on || l.only != only || l.tryingGroup != pr.group || l.trying != pr.element {
-		l.on, l.only = true, only
-		l.try(pr.group, pr.element)
+	if !l.on || l.editingGroup != pr.group || l.editing != pr.element {
+		l.on = true
+		l.editingGroup, l.editing = pr.group, pr.element
 		p.character.redress()
 	}
 }
 
 // baseBar is drawn over the top of the portrait of a project: the base that
-// wears the portrait modifiers, with a way to another, its sex and age, and
-// whether it wears the other groups too.
+// wears the portrait modifiers, with a way to another, and its sex and age.
 func (a *App) baseBar() {
 	p := a.portrait
 	c := p.character
@@ -143,13 +142,9 @@ func (a *App) baseBar() {
 	if imgui.SliderIntV("##age", &c.age, 0, maxAge, "%d years", imgui.SliderFlagsAlwaysClamp) {
 		c.changed = true
 	}
-
-	imgui.SameLineV(0, gui.Scaled(24))
-	imgui.Checkbox("Also wear the other portrait modifiers", &a.project.wearOthers)
-	imgui.SetItemTooltip("Dress the base in the other groups as the game would, or in the element picked alone")
 }
 
-// projectPanel is the Portrait Modifiers window of a project: the groups, and
+// projectPanel is the Modifiers window of a project: the groups, and
 // the elements of the one picked.
 func (a *App) projectPanel() {
 	if a.state.mode != modeModifiers {
@@ -157,6 +152,14 @@ func (a *App) projectPanel() {
 	}
 
 	a.dockFirstTime(panelProject, panelPreview, imgui.DirLeft, projectListRatio)
+
+	// The portrait modifiers are what a project is about, so their window is
+	// the tab shown of those it shares, the Worn With and the DNA tabs beside
+	// it; see selectCharacter.
+	if a.state.selectProject > 0 && !a.hidden() {
+		a.state.selectProject--
+		imgui.SetNextWindowFocus()
+	}
 
 	defer imgui.End()
 
@@ -259,6 +262,72 @@ func (a *App) projectPanel() {
 	}
 
 	imgui.EndChild()
+}
+
+// baseDNAPanel is the DNA tab of a project, beside the Modifiers window:
+// the genes of the base, to change to try the portrait modifiers on another
+// face or body. What is changed there is never saved; the project
+// saves its portrait modifiers alone.
+func (a *App) baseDNAPanel() {
+	if a.state.mode != modeModifiers || !a.dockFirstTime(panelBaseDNA, panelProject, imgui.DirNone, 0) {
+		return
+	}
+
+	defer imgui.End()
+
+	if !imgui.Begin(panelBaseDNA) {
+		return
+	}
+
+	if a.portrait == nil || !a.portrait.loaded() || a.hidden() {
+		imgui.TextDisabled("Pick a base first")
+
+		return
+	}
+
+	gui.WarningText(gui.Iconed(gui.IconWarning, "Changes here are not saved"))
+	dimmedWrapped("The DNA of the base, to try the portrait modifiers on another face or body. Start a character from File > New Portrait to make one to keep.")
+	imgui.Separator()
+
+	a.geneEditor()
+}
+
+// wearPanel is the Worn With tab of a project, beside the Modifiers window:
+// what the base wears of the groups other than the one edited, to see the
+// element edited together with them, picked as in the Portrait Modifiers
+// window of a character.
+func (a *App) wearPanel() {
+	if a.state.mode != modeModifiers || !a.dockFirstTime(panelWear, panelProject, imgui.DirNone, 0) {
+		return
+	}
+
+	defer imgui.End()
+
+	if !imgui.Begin(panelWear) {
+		return
+	}
+
+	if a.portrait == nil || !a.portrait.loaded() || a.hidden() {
+		imgui.TextDisabled("Pick a base first")
+
+		return
+	}
+
+	pr := a.project
+	l := &a.portrait.character.looks
+
+	dimmedWrapped("What the base wears of the other portrait modifiers with the element edited, to see them together. Pointing at an element in a list tries it on.")
+	imgui.Separator()
+
+	var shown []*genes.ModifierGroup
+
+	for _, group := range l.groups {
+		if group.Usage == usageGame && group.Key != pr.group {
+			shown = append(shown, group)
+		}
+	}
+
+	a.looksTable(shown, 0)
 }
 
 // The workspace's proportions: how much of the portrait's node the list of
@@ -399,7 +468,7 @@ func (a *App) elementPanel() {
 	// project then.
 	edited := cloneModifier(modifier)
 
-	if a.geneChanges(&edited) {
+	if a.geneChanges(group.Key, &edited) {
 		project := pr.edit(group)
 		project.Modifiers[at] = edited
 		project.changed(edited.Name)
@@ -481,13 +550,20 @@ var (
 	}
 )
 
+// colourModeHints say what each mode does to a colour gene, which has a place
+// in a palette rather than a template and a strength.
+var colourModeHints = map[string]string{
+	genes.ModifierReplace: "Puts the colour at this place of the palette, in the place of the DNA's",
+	genes.ModifierModify:  "Moves the DNA's colour across the palette by x and down it by y",
+}
+
 // sexTypes are who a change can be for, as the games' files write it, an
 // empty one for everyone.
 var sexTypes = []string{"", "male", "female", "boy", "girl"}
 
-// geneChanges edits the changes of the genes of an element, and reports
-// whether anything changed.
-func (a *App) geneChanges(modifier *genes.PortraitModifier) bool {
+// geneChanges edits the changes of the genes of an element of a group, and
+// reports whether anything changed.
+func (a *App) geneChanges(group string, modifier *genes.PortraitModifier) bool {
 	changed := false
 
 	gui.PushStrongFont()
@@ -524,7 +600,7 @@ func (a *App) geneChanges(modifier *genes.PortraitModifier) bool {
 	for index := range modifier.Genes {
 		imgui.PushIDInt(int32(index))
 
-		edited, remove := a.geneChange(&modifier.Genes[index])
+		edited, remove := a.geneChange(group, modifier.Name, index, &modifier.Genes[index])
 		changed = changed || edited || remove
 
 		if remove {
@@ -569,9 +645,10 @@ func (a *App) usesOutfitTags() bool {
 	return false
 }
 
-// geneChange edits one change of a gene, in a box of its own, and reports
+// geneChange edits one change of a gene of an element of a group, by its
+// place among the element's changes, in a box of its own, and reports
 // whether it changed and whether it is to be taken away.
-func (a *App) geneChange(change *genes.GeneModifier) (changed, remove bool) {
+func (a *App) geneChange(group, element string, index int, change *genes.GeneModifier) (changed, remove bool) {
 	imgui.BeginChildStrV("##change", imgui.Vec2{}, imgui.ChildFlagsBorders|imgui.ChildFlagsAutoResizeY|imgui.ChildFlagsAlwaysUseWindowPadding, 0)
 	defer imgui.EndChild()
 
@@ -603,7 +680,12 @@ func (a *App) geneChange(change *genes.GeneModifier) (changed, remove bool) {
 		change.Mode, changed = picked, true
 	}
 
-	if hint, ok := modeHints[change.Mode]; ok {
+	hint, ok := modeHints[change.Mode]
+	if change.Kind == "color" {
+		hint, ok = colourModeHints[change.Mode]
+	}
+
+	if ok {
 		imgui.SetCursorPosX(gui.Scaled(fieldLabelWidth))
 		dimmedWrapped(hint)
 	}
@@ -622,7 +704,9 @@ func (a *App) geneChange(change *genes.GeneModifier) (changed, remove bool) {
 		}
 	}
 
-	if change.Kind == "color" {
+	if change.Kind == "color" && change.Mode == genes.ModifierReplace {
+		changed = a.colourPlace(change) || changed
+	} else if change.Kind == "color" {
 		x, y := float32(change.X.Or(0)), float32(change.Y.Or(0))
 
 		field("x")
@@ -641,11 +725,7 @@ func (a *App) geneChange(change *genes.GeneModifier) (changed, remove bool) {
 	}
 
 	if change.Kind == "accessory" {
-		field("accessory")
-
-		if imgui.InputTextWithHint("##accessory", "picked by the strength", &change.Accessory, 0, nil) {
-			changed = true
-		}
+		changed = a.accessoryField(group, element, index, change, field) || changed
 	}
 
 	field("for")
@@ -666,6 +746,148 @@ func (a *App) geneChange(change *genes.GeneModifier) (changed, remove bool) {
 	imgui.NewLine()
 
 	return changed, remove
+}
+
+// accessoryField is the accessory a change of an accessory gene dresses the
+// base in, out of those of its template for the base's sex. With a value,
+// picking one sets the value to the middle of the strengths that pick it,
+// which is saved. With a range, the game picks one of those the range covers
+// by chance, and picking one of them previews it, which is not saved; see
+// looks.strengths. A change of the mode modify adds to the DNA's strength,
+// which no accessory can be picked by, and has none. It reports whether the
+// change changed.
+func (a *App) accessoryField(group, element string, index int, change *genes.GeneModifier, field func(string)) bool {
+	p := a.portrait
+	c := p.character
+
+	// A file that names the accessory has it drawn whatever the strength.
+	if change.Accessory != "" {
+		field("accessory")
+		imgui.AlignTextToFramePadding()
+		imgui.TextUnformatted(change.Accessory)
+		imgui.SetItemTooltip("Named in the file, which draws it whatever the strength")
+
+		return false
+	}
+
+	if change.Mode == genes.ModifierModify || change.Mode == genes.ModifierModifyMultiply {
+		return false
+	}
+
+	gene, ok := p.genes.AccessoryGene(change.Gene)
+	if !ok {
+		return false
+	}
+
+	template, ok := templateNamed(gene, change.Template)
+	if !ok {
+		return false
+	}
+
+	choices := template.For(c.sex)
+
+	if spread, ranged := change.Range.Get(); ranged {
+		// The list is there even for a range of one accessory, which says what
+		// the range dresses the base in.
+		picks := choices.Picks(spread)
+		if len(picks) == 0 {
+			return false
+		}
+
+		l := &c.looks
+
+		value, picked := l.strength(group, element, index, spread)
+		if !picked {
+			value = change.Strength()
+		}
+
+		current, _ := choices.Pick(value)
+
+		field("preview")
+
+		if choice, ok := accessoryCombo("##preview", current, picks); ok {
+			l.setStrength(group, element, index, choice.At(0.5))
+			c.redress()
+		}
+
+		imgui.SetItemTooltip(fmt.Sprintf("Which of the %d accessories of the range the base is shown in; the game picks one by chance. It is not saved.", len(picks)))
+
+		return false
+	}
+
+	picks := choices.Picks(genes.Range{Min: 0, Max: 1})
+	if len(picks) == 0 {
+		return false
+	}
+
+	current, _ := choices.Pick(change.Value.Or(0))
+
+	field("accessory")
+
+	if choice, ok := accessoryCombo("##accessory", current, picks); ok {
+		change.Value = database.Some(choice.At(0.5))
+
+		return true
+	}
+
+	imgui.SetItemTooltip("The accessory the value picks, which picking one sets it to")
+
+	return false
+}
+
+// accessoryCombo is a list of the accessories a template picks, by the
+// strengths that pick them, to pick one of. It reports the one picked, when
+// one is.
+func accessoryCombo(id string, current genes.Choice, picks []genes.Picked) (genes.Picked, bool) {
+	if !imgui.BeginComboV(id, accessoryLabel(current.Accessory), imgui.ComboFlagsHeightLarge) {
+		return genes.Picked{}, false
+	}
+	defer imgui.EndCombo()
+
+	for at, choice := range picks {
+		if imgui.SelectableBoolV(fmt.Sprintf("%s##%d", accessoryLabel(choice.Accessory), at), choice.Choice == current, 0, imgui.Vec2{}) && choice.Choice != current {
+			return choice, true
+		}
+	}
+
+	return genes.Picked{}, false
+}
+
+// colourPlace picks where a colour change that replaces the DNA's colour
+// puts it, on the palette of its gene as the DNA editor picks a colour, with
+// its x and y beneath, from 0 to 1. It reports whether the place changed. A
+// gene without a palette to show is set by its numbers alone.
+func (a *App) colourPlace(change *genes.GeneModifier) bool {
+	p := a.portrait
+	changed := false
+
+	place := [2]int32{
+		int32(math.Round(change.X.Or(0) * maxGeneValue)),
+		int32(math.Round(change.Y.Or(0) * maxGeneValue)),
+	}
+
+	if gene, ok := p.genes.ColorGenes.Get(change.Gene); ok {
+		if swatch := p.swatches[gene.Color]; swatch != nil {
+			if _, _, picked := a.palettePicker(gene, &place, swatch); picked {
+				change.X, change.Y = database.Some(float64(place[0])/maxGeneValue), database.Some(float64(place[1])/maxGeneValue)
+				changed = true
+			}
+		}
+	}
+
+	xy := [2]float32{float32(change.X.Or(0)), float32(change.Y.Or(0))}
+
+	imgui.AlignTextToFramePadding()
+	imgui.TextUnformatted("x, y")
+	imgui.SameLineV(gui.Scaled(fieldLabelWidth), 0)
+	imgui.SetNextItemWidth(-1)
+
+	if imgui.SliderFloat2V("##place", &xy, 0, 1, "%.3f", imgui.SliderFlagsAlwaysClamp) {
+		change.X, change.Y = database.Some(float64(xy[0])), database.Some(float64(xy[1]))
+		changed = true
+	}
+
+	return changed
 }
 
 // fieldLabelWidth is how wide the names of the fields of a change are,
@@ -707,12 +929,29 @@ func strengthFields(change *genes.GeneModifier, field func(string)) bool {
 	}
 
 	value := float32(change.Value.Or(0))
+	low, high := valueBounds(change.Mode)
 
-	if imgui.SliderFloat("##value", &value, -1, 1) {
+	if imgui.SliderFloat("##value", &value, low, high) {
 		change.Value, changed = database.Some(float64(value)), true
 	}
 
 	return changed
+}
+
+// valueBounds are the values a change of a mode takes: a strength from 0 to
+// 1 to add or to replace the DNA's with, as a DNA's strength runs; what to add
+// to the DNA's strength for modify, which takes it down as well as up; and
+// what to multiply it by for modify_multiply, which halves or doubles it at
+// most here.
+func valueBounds(mode string) (low, high float32) {
+	switch mode {
+	case genes.ModifierModify:
+		return -1, 1
+	case genes.ModifierModifyMultiply:
+		return 0, 2
+	}
+
+	return 0, 1
 }
 
 // geneKeys are the keys of the genes of a kind, in order: the special genes

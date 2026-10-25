@@ -44,9 +44,9 @@ type looks struct {
 	// group, while it is pointed at in a list.
 	trying, tryingGroup string
 
-	// only draws the character in the modifiers of one group alone, by its
-	// key, as the project's workspace does to show one element by itself.
-	only string
+	// editing is the element a project edits, by its group, which is drawn
+	// in the place of what is picked or tried on of that group.
+	editing, editingGroup string
 
 	// strengths are the strengths picked within the ranges the elements give
 	// the genes they change, by the group and the element, and then by the
@@ -60,11 +60,19 @@ func strengthKey(group, element string) string {
 	return group + "/" + element
 }
 
-// strength is the strength picked for a change of an element, if one is.
-func (l *looks) strength(group, element string, change int) (float64, bool) {
+// strength is the strength picked for a change of an element, if one is
+// that the range the change gives still covers: a range changed since, so as
+// to leave it out, is drawn at its middle again.
+func (l *looks) strength(group, element string, change int, spread genes.Range) (float64, bool) {
 	value, ok := l.strengths[strengthKey(group, element)][change]
 
-	return value, ok
+	return value, ok && covers(spread, value)
+}
+
+// covers reports whether a range holds a strength, whichever way round its
+// ends are written.
+func covers(spread genes.Range, value float64) bool {
+	return value >= min(spread.Min, spread.Max) && value <= max(spread.Min, spread.Max)
 }
 
 // setStrength picks a strength within the range a change of an element
@@ -89,8 +97,9 @@ func (l *looks) unsetStrength(group, element string, change int) {
 }
 
 // withStrengths is a modifier with the strengths picked for it: a copy in
-// which each change picked a strength of gives that strength in the place of
-// its range, or the modifier itself where none is picked.
+// which each change picked a strength of that its range still covers gives
+// that strength in the place of the range, or the modifier itself where none
+// is picked.
 func (l *looks) withStrengths(group string, modifier *genes.PortraitModifier) *genes.PortraitModifier {
 	picked := l.strengths[strengthKey(group, modifier.Name)]
 	if len(picked) == 0 {
@@ -101,7 +110,7 @@ func (l *looks) withStrengths(group string, modifier *genes.PortraitModifier) *g
 	copied.Genes = slices.Clone(modifier.Genes)
 
 	for change, value := range picked {
-		if change < len(copied.Genes) && copied.Genes[change].Range.Set {
+		if change < len(copied.Genes) && copied.Genes[change].Range.Set && covers(copied.Genes[change].Range.Value, value) {
 			copied.Genes[change].Value, copied.Genes[change].Range = database.Some(value), database.Opt[genes.Range]{}
 		}
 	}
@@ -161,15 +170,20 @@ func (l *looks) group(key string) (*genes.ModifierGroup, bool) {
 	return nil, false
 }
 
-// choice is the modifier a group is drawn with: the one tried on, or the one
-// picked; and for a group nothing was ever picked of, the first modifier the
+// choice is the modifier a group is drawn with: the one edited, the one
+// tried on, or the one picked; and for a group nothing was ever picked of, the
+// first modifier the
 // game considers for every character alike, at a weight above nothing that
 // no condition changes, as it always shrinks a body under its clothes by
 // special_shrink_body. Its fallback is drawn only where it is picked. It
 // reports false where the group is drawn with nothing.
 func (l *looks) choice(group *genes.ModifierGroup) (*genes.PortraitModifier, bool) {
 	name, touched := l.picked[group.Key]
-	if l.tryingGroup == group.Key {
+
+	switch group.Key {
+	case l.editingGroup:
+		name, touched = l.editing, true
+	case l.tryingGroup:
 		name, touched = l.trying, true
 	}
 
@@ -209,8 +223,8 @@ func alwaysApplied(group *genes.ModifierGroup) (*genes.PortraitModifier, bool) {
 // game applies them: by the priority of their groups, the highest last, so
 // that it has the last word on a gene several change, and by the groups'
 // keys where they are equal. None while the character is not dressed, and
-// none of the groups the game does not pick from on its own, unless one is
-// shown alone.
+// none of the groups the game does not pick from on its own, unless a project
+// edits one, such as the props of the animations.
 func (l *looks) modifiers() []*genes.PortraitModifier {
 	if !l.dressing() {
 		return nil
@@ -219,13 +233,7 @@ func (l *looks) modifiers() []*genes.PortraitModifier {
 	var groups []*genes.ModifierGroup
 
 	for _, group := range l.groups {
-		switch {
-		case l.only != "":
-			if group.Key == l.only {
-				groups = append(groups, group)
-			}
-
-		case group.Usage == usageGame:
+		if group.Usage == usageGame || group.Key == l.editingGroup {
 			groups = append(groups, group)
 		}
 	}

@@ -125,6 +125,20 @@ clothes = {
 		t.Error("the coat as the game reads it lost its range")
 	}
 
+	// A range changed so as to leave the strength picked out draws its
+	// middle again, as though none were picked.
+	clothes, _ := table.Get("clothes")
+	clothes.Modifiers[0].Genes[0].Range = database.Some(genes.Range{Min: 0, Max: 0.5})
+
+	if _, ok := l.strength("clothes", "coat", 0, clothes.Modifiers[0].Genes[0].Range.Value); ok {
+		t.Error("a strength the range no longer covers is still picked")
+	}
+
+	if drawn := l.modifiers(); !drawn[0].Genes[0].Range.Set {
+		t.Errorf("with the range narrowed, the coat is drawn with %+v, want its range", drawn[0].Genes[0])
+	}
+
+	clothes.Modifiers[0].Genes[0].Range = database.Some(genes.Range{Min: 0, Max: 1})
 	l.unsetStrength("clothes", "coat", 0)
 
 	if drawn := l.modifiers(); !drawn[0].Genes[0].Range.Set {

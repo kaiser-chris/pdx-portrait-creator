@@ -278,6 +278,14 @@ func (a *App) characterPanel() {
 		return
 	}
 
+	a.geneEditor()
+}
+
+// geneEditor is what the character panel shows of a portrait: a search over
+// every gene, the rail of the categories, and the genes of the one picked or
+// those the search finds. A portrait modifier project shows it too, in a tab
+// of its own, to try its portrait modifiers on another DNA.
+func (a *App) geneEditor() {
 	p := a.portrait
 	changed, counts := p.character.changes()
 
@@ -296,18 +304,64 @@ func (a *App) characterPanel() {
 	imgui.SetNextItemWidth(-1)
 	imgui.InputTextWithHint("##search", gui.Iconed(gui.IconSearch, fmt.Sprintf("Search all %d genes", p.character.listed())), &a.state.geneSearch, 0, nil)
 
-	if imgui.BeginChildStrV("##categories", imgui.Vec2{X: gui.Scaled(railWidth)}, imgui.ChildFlagsBorders, 0) {
-		a.categoryRail(counts)
-	}
+	// Where the editor is too narrow for the rail beside the genes, as in the
+	// DNA tab of a project, the categories are a list above them instead.
+	if imgui.ContentRegionAvail().X < gui.Scaled(railWidth*narrowEditor) {
+		a.categoryCombo(counts)
+	} else {
+		if imgui.BeginChildStrV("##categories", imgui.Vec2{X: gui.Scaled(railWidth)}, imgui.ChildFlagsBorders, 0) {
+			a.categoryRail(counts)
+		}
 
-	imgui.EndChild()
-	imgui.SameLine()
+		imgui.EndChild()
+		imgui.SameLine()
+	}
 
 	if imgui.BeginChildStrV("##genes", imgui.Vec2{}, imgui.ChildFlagsAlwaysUseWindowPadding, 0) {
 		a.geneList(changed)
 	}
 
 	imgui.EndChild()
+}
+
+// narrowEditor is how many rails wide the gene editor has to be at least to
+// show the rail of the categories beside the genes.
+const narrowEditor = 2.4
+
+// categoryCombo is the list of the categories to pick one of, in the place
+// of the rail where the editor is narrow, each with how many of its genes
+// are changed.
+func (a *App) categoryCombo(counts map[int]int) {
+	p := a.portrait
+
+	label := func(index int) string {
+		category := categories[index]
+		text := gui.Iconed(category.icon, category.name)
+
+		if count := counts[index]; count > 0 {
+			text = fmt.Sprintf("%s (%d)", text, count)
+		}
+
+		return text + "###" + category.id
+	}
+
+	imgui.SetNextItemWidth(-1)
+
+	if !imgui.BeginComboV("##category", label(a.state.category), imgui.ComboFlagsHeightLarge) {
+		return
+	}
+	defer imgui.EndCombo()
+
+	for index := range categories {
+		if !p.character.lists(index) {
+			continue
+		}
+
+		if imgui.SelectableBoolV(label(index), a.state.category == index, 0, imgui.Vec2{}) {
+			a.state.category = index
+			a.state.geneSearch = ""
+		}
+	}
 }
 
 // categoryRail lists the categories, each with how many of its genes are
@@ -688,7 +742,10 @@ func (a *App) colourList(changed map[string]bool) {
 			continue
 		}
 
-		left, width := a.palettePicker(colour, swatch)
+		left, width, picked := a.palettePicker(colour.gene, &colour.value, swatch)
+		if picked {
+			c.coloursChanged = true
+		}
 
 		// Where in the palette the colour is, to type in, as wide as the
 		// palette and beneath it, and the way back to the basis's beside it.
@@ -728,8 +785,10 @@ func (a *App) colourList(changed map[string]bool) {
 // or dragging, with the place marked and the rectangles of the ethnicity
 // outlined. A palette held to paletteHeight is narrower than the panel, and
 // stands in the middle of it; it returns where the palette's left edge is,
-// as a cursor position, and its width, for what is drawn beneath it.
-func (a *App) palettePicker(colour *colourGene, swatch *image.RGBA) (left, width float32) {
+// as a cursor position, and its width, for what is drawn beneath it, and
+// whether the place was picked anew. The place is the gene's two numbers
+// from 0 to 255, of a DNA or of a portrait modifier's colour change.
+func (a *App) palettePicker(gene *genes.ColorGene, value *[2]int32, swatch *image.RGBA) (left, width float32, changed bool) {
 	p := a.portrait
 
 	bounds := swatch.Bounds()
@@ -751,7 +810,7 @@ func (a *App) palettePicker(colour *colourGene, swatch *image.RGBA) (left, width
 	// palette has the palette shown the same way round, so that where the
 	// place is marked is the colour the hair is; see grading.hairColour.
 	from, to := imgui.Vec2{}, imgui.Vec2{X: 1, Y: 1}
-	if colour.gene.Color == "hair" && p.staging.grading.mirroredHair {
+	if gene.Color == "hair" && p.staging.grading.mirroredHair {
 		from.X, to.X = 1, 0
 	}
 
@@ -765,9 +824,8 @@ func (a *App) palettePicker(colour *colourGene, swatch *image.RGBA) (left, width
 		v := min(max((mouse.Y-origin.Y)/height, 0), 1)
 
 		next := [2]int32{int32(math.Round(float64(u) * maxGeneValue)), int32(math.Round(float64(v) * maxGeneValue))}
-		if next != colour.value {
-			colour.value = next
-			p.character.coloursChanged = true
+		if next != *value {
+			*value, changed = next, true
 		}
 	}
 
@@ -780,7 +838,7 @@ func (a *App) palettePicker(colour *colourGene, swatch *image.RGBA) (left, width
 	// weight, which pointing at one says, while they are shown.
 	var boxes []genes.ColorChoice
 	if p.basis.ethnicity != nil && a.state.ethnicityBoxes {
-		if colours, ok := p.basis.ethnicity.Color(colour.gene.Key); ok {
+		if colours, ok := p.basis.ethnicity.Color(gene.Key); ok {
 			boxes = colours.Choices
 		}
 	}
@@ -799,11 +857,11 @@ func (a *App) palettePicker(colour *colourGene, swatch *image.RGBA) (left, width
 		imgui.SetTooltip(strings.ReplaceAll(tip, "%", "%%"))
 	}
 
-	marker := at(float64(colour.value[0])/maxGeneValue, float64(colour.value[1])/maxGeneValue)
+	marker := at(float64(value[0])/maxGeneValue, float64(value[1])/maxGeneValue)
 	draw.AddCircleV(marker, gui.Scaled(6), imgui.ColorConvertFloat4ToU32(imgui.Vec4{W: 1}), 0, gui.Scaled(3))
 	draw.AddCircleV(marker, gui.Scaled(6), imgui.ColorConvertFloat4ToU32(imgui.Vec4{X: 1, Y: 1, Z: 1, W: 1}), 0, gui.Scaled(1.5))
 
-	return left, width
+	return left, width, changed
 }
 
 // paletteTooltip is what pointing at a palette says: how to pick a colour,

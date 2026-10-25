@@ -102,6 +102,14 @@ type state struct {
 	// brought to the front of the tabs it shares: making a character starts
 	// with its DNA, and the Portrait Modifiers window beside it comes later.
 	selectCharacter int
+
+	// selectProject is the same for the Modifiers window of a project, which
+	// is shown before the Worn With and the DNA tabs beside it.
+	selectProject int
+
+	// dockWaits are how many frames each window shown for the first time has
+	// waited for its neighbour to be docked; see dockFirstTime.
+	dockWaits map[string]int
 }
 
 // selectFrames is how many frames the character panel is brought forward

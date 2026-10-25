@@ -39,13 +39,11 @@ const (
 )
 
 // project is a portrait modifier project: the groups it changes or makes, by
-// key, the group and the element shown, and whether the base wears the other
-// groups as the game would while the element is shown.
+// key, and the group and the element shown.
 type project struct {
 	groups map[string]*projectGroup
 
 	group, element string
-	wearOthers     bool
 
 	// weights are the weights of the game's elements as they are written,
 	// by the group and the element, which are read once and kept: writing
@@ -73,7 +71,7 @@ type projectGroup struct {
 
 // newProject is a project that changes nothing yet.
 func newProject() *project {
-	return &project{groups: map[string]*projectGroup{}, weights: map[string]string{}, wearOthers: true}
+	return &project{groups: map[string]*projectGroup{}, weights: map[string]string{}}
 }
 
 // over are the groups as the project draws them: the game's, each in its

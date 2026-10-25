@@ -70,7 +70,16 @@ func TestPortraitModifierProject(t *testing.T) {
 		t.Fatal("in a project, its windows are not the ones drawn")
 	}
 
-	// The element picked of the clothes dresses the base alone.
+	// The DNA of the base and what it wears are tabs beside the portrait
+	// modifiers, which are the tab shown.
+	for _, tab := range []string{panelBaseDNA, panelWear} {
+		if window, ok := gui.FindWindow(tab); !ok || !window.WasActive() || !window.Hidden() {
+			t.Errorf("%s is not a tab behind the portrait modifiers", tab)
+		}
+	}
+
+	// The element picked of the clothes dresses the base, with nothing of the
+	// other groups but what the game always applies, until it is picked.
 	clothes, ok := portrait.character.looks.group("clothes")
 	if !ok {
 		t.Fatal("the game has no clothes")
@@ -85,16 +94,46 @@ func TestPortraitModifierProject(t *testing.T) {
 
 	element := clothes.Modifiers[at].Name
 	pr := application.project
-	pr.group, pr.element, pr.wearOthers = "clothes", element, false
+	pr.group, pr.element = "clothes", element
 	waitForRebuild(t, application)
 
-	if got := names(portrait.character.looks.modifiers()); len(got) != 1 || got[0] != element {
-		t.Errorf("the base wears %v, want %s alone", got, element)
+	want := []string{element}
+
+	for _, group := range portrait.character.looks.groups {
+		if modifier, ok := alwaysApplied(group); ok && group.Usage == usageGame {
+			want = append(want, modifier.Name)
+		}
+	}
+
+	got := names(portrait.character.looks.modifiers())
+	slices.Sort(got)
+	slices.Sort(want)
+
+	if !slices.Equal(got, want) {
+		t.Errorf("the base wears %v, want %v", got, want)
 	}
 
 	worn := slices.Clone(portrait.bodyParts)
 	if len(worn) == 0 {
 		t.Errorf("in %s, the body is drawn with nothing", element)
+	}
+
+	// Picked in the Worn With tab, another group is worn with the element edited,
+	// which stays what the clothes are drawn with while others are tried on.
+	hairstyles, ok := portrait.character.looks.group("hairstyles")
+	if ok && len(hairstyles.Modifiers) > 1 {
+		portrait.character.looks.pick("hairstyles", hairstyles.Modifiers[1].Name)
+		portrait.character.looks.try("clothes", clothes.Fallback)
+		portrait.character.redress()
+		waitForRebuild(t, application)
+
+		if got := names(portrait.character.looks.modifiers()); !slices.Contains(got, element) || !slices.Contains(got, hairstyles.Modifiers[1].Name) {
+			t.Errorf("with the hair picked, the base wears %v, want %s and %s", got, element, hairstyles.Modifiers[1].Name)
+		}
+
+		portrait.character.looks.stopTrying()
+		portrait.character.looks.unpick("hairstyles")
+		waitForRebuild(t, application)
 	}
 
 	// The weight window and every dialog draw.
