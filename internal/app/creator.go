@@ -128,7 +128,12 @@ func (a *App) previewPanel() {
 	margin := gui.Scaled(overlayMargin)
 
 	imgui.SetCursorScreenPos(imgui.Vec2{X: origin.X + margin, Y: origin.Y + margin})
-	a.portraitBar()
+
+	if a.state.mode == modeModifiers {
+		a.baseBar()
+	} else {
+		a.portraitBar()
+	}
 
 	a.viewBar(origin, imgui.Vec2{X: float32(width), Y: float32(height)}, margin)
 	a.stagingBar(origin, imgui.Vec2{X: float32(width), Y: float32(height)}, margin)
@@ -240,6 +245,11 @@ func toggle(label string, on bool) bool {
 
 // characterPanel lists the genes of the portrait by category, to change.
 func (a *App) characterPanel() {
+	// A portrait modifier project leaves the DNA of its base as it is.
+	if a.state.mode != modeCharacter {
+		return
+	}
+
 	defer imgui.End()
 
 	if !imgui.Begin(panelCharacter) {

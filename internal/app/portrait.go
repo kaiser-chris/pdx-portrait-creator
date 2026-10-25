@@ -566,14 +566,17 @@ func (p *portrait) poll() bool {
 
 		// The looks picked stay picked through another sex or another start,
 		// and the new body is dressed in them as soon as it is drawn.
-		var picked map[string]string
+		var kept looks
 		if p.character != nil {
-			picked = p.character.looks.picked
+			kept = p.character.looks
+			kept.stopTrying()
 		}
+
+		kept.groups = groupList(result.modifiers)
 
 		p.character = newCharacter(result.genes, result.sex, result.dna, append(body.Attributes(), head.Attributes()...))
 		p.character.age = age
-		p.character.looks = looks{groups: result.modifiers, picked: picked}
+		p.character.looks = kept
 		p.character.tags = result.tags
 		p.character.partsChanged = p.character.looks.dressing()
 		p.bodyParts = nil

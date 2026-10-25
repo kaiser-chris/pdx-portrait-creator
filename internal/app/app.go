@@ -54,6 +54,10 @@ type App struct {
 	// portrait on; see references.go.
 	references references
 
+	// project is the portrait modifier project, which keeps what it changes
+	// through every base it is worn by; see project.go.
+	project *project
+
 	// dockWindowClass is handed to the dock space every frame. cimgui-go
 	// dereferences that argument even when it is nil, so one default instance
 	// is allocated for the lifetime of the application instead.
@@ -103,6 +107,7 @@ func New(options Options) (*App, error) {
 		store:    store,
 		settings: settings,
 		state:    newState(settings),
+		project:  newProject(),
 	}
 	if err != nil {
 		application.state.status = "Settings could not be loaded, using defaults"
@@ -220,8 +225,17 @@ func (a *App) frame() {
 	a.statusBar()
 	a.dockSpace()
 
+	a.syncLooks()
+
 	a.previewPanel()
 	a.characterPanel()
+	a.looksPanel()
+	a.projectPanel()
+	a.elementPanel()
+	a.weightWindow()
+	a.newElementPopup()
+	a.newGroupPopup()
+	a.saveModifierPopups()
 
 	a.settingsWindow()
 	a.aboutPopup()

@@ -32,11 +32,12 @@ const coverShade = 0.55
 
 // The sizes of the welcome screen and the picker, unscaled.
 const (
-	welcomeWidth  = 1080
-	choiceHeight  = 150
-	pickerWidth   = 1040
-	pickerHeight  = 680
-	pickerListing = 400
+	welcomeWidth     = 1080
+	choiceHeight     = 150
+	modeChoiceHeight = 84
+	pickerWidth      = 1040
+	pickerHeight     = 680
+	pickerListing    = 400
 )
 
 // pickerKind is what the picker lists.
@@ -146,18 +147,48 @@ func (a *App) welcomeWindow() {
 
 	imgui.Dummy(gui.ScaledVec2(0, 8))
 	imgui.TextDisabled(strings.ToUpper(applicationName))
-	gui.PushStrongFont()
-	imgui.TextUnformatted("Who are we making today?")
-	gui.PopFont()
-	dimmedWrapped("Pick a starting point. Every gene stays editable afterwards, and File > New Portrait comes back here.")
-	imgui.Dummy(gui.ScaledVec2(0, 8))
+	imgui.Dummy(gui.ScaledVec2(0, 4))
 
 	spacing := imgui.CurrentStyle().ItemSpacing().X
+
+	// What is made comes first: a character's DNA, or portrait modifiers
+	// worn by a character picked as their base.
+	half := (imgui.ContentRegionAvail().X - spacing) / 2
+
+	if modeChoice(gui.Iconed(gui.IconPerson, "A Character"), "Make a character's DNA: face, body and colours. Portrait modifiers can be tried on at the end.", half, a.state.welcomeMode == modeCharacter) {
+		a.state.welcomeMode = modeCharacter
+	}
+
+	imgui.SameLine()
+
+	if modeChoice(gui.Iconed(gui.IconProps, "Portrait Modifiers"), "Change the game's portrait modifiers, add elements to them or make new ones, worn by a character you pick.", half, a.state.welcomeMode == modeModifiers) {
+		a.state.welcomeMode = modeModifiers
+	}
+
+	imgui.Dummy(gui.ScaledVec2(0, 4))
+	imgui.Separator()
+	imgui.Dummy(gui.ScaledVec2(0, 4))
+
+	gui.PushStrongFont()
+
+	if a.state.welcomeMode == modeModifiers {
+		imgui.TextUnformatted("Who wears them while you work?")
+		gui.PopFont()
+		dimmedWrapped("Pick a base. Its DNA stays as it is while you work on portrait modifiers, and the bar over the portrait swaps it for another at any time.")
+	} else {
+		imgui.TextUnformatted("Who are we making today?")
+		gui.PopFont()
+		dimmedWrapped("Pick a starting point. Every gene stays editable afterwards, and File > New Portrait comes back here.")
+	}
+
+	imgui.Dummy(gui.ScaledVec2(0, 8))
+
 	width := (imgui.ContentRegionAvail().X - spacing*3) / 4
 
 	imgui.BeginDisabledV(!ready)
 
 	if choice(gui.Iconed(gui.IconAddCircle, "From Scratch"), "The neutral ethnicity_template: every gene on its first template, at the middle.", width) {
+		a.setMode(a.state.welcomeMode)
 		a.state.welcome = false
 
 		if p.basis.kind != basisScratch {
@@ -174,12 +205,14 @@ func (a *App) welcomeWindow() {
 	}
 
 	if choice(gui.Iconed(gui.IconGroups, "From an Ethnicity"), fmt.Sprintf("One of the %d ethnicities in common/ethnicities, at its likeliest look.", ethnicities), width) {
+		a.setMode(a.state.welcomeMode)
 		a.openPicker(pickEthnicities)
 	}
 
 	imgui.SameLine()
 
 	if choice(gui.Iconed(gui.IconPerson, "From a Character"), fmt.Sprintf("One of the %d characters in %s, with their exact DNA.", characters, folder), width) {
+		a.setMode(a.state.welcomeMode)
 		a.openPicker(pickCharacters)
 	}
 
@@ -195,6 +228,7 @@ func (a *App) welcomeWindow() {
 	imgui.BeginDisabledV(!found.usable())
 
 	if choice(gui.Iconed(gui.IconPaste, "From the Clipboard"), found.describe(), width) {
+		a.setMode(a.state.welcomeMode)
 		a.state.welcome = false
 		a.fromClipboard()
 	}
@@ -240,11 +274,37 @@ func (a *App) welcomeWindow() {
 // a title and what it starts from beneath it. It reports whether it was
 // clicked.
 func choice(title, detail string, width float32) bool {
+	return sizedChoice(title, detail, imgui.Vec2{X: width, Y: gui.Scaled(choiceHeight)})
+}
+
+// modeChoice is one of the workflows of the welcome screen, a choice lower
+// than a starting point, drawn in the accent colour while it is the one
+// chosen. It reports whether it was clicked.
+func modeChoice(title, detail string, width float32, on bool) bool {
+	// The detail, dimmed on the others, is drawn in the text's own colour on
+	// the accent, which would leave it too faint to read.
+	if on {
+		imgui.PushStyleColorVec4(imgui.ColButton, *imgui.StyleColorVec4(imgui.ColHeaderActive))
+		imgui.PushStyleColorVec4(imgui.ColButtonHovered, *imgui.StyleColorVec4(imgui.ColHeaderActive))
+		imgui.PushStyleColorVec4(imgui.ColTextDisabled, *imgui.StyleColorVec4(imgui.ColText))
+	}
+
+	clicked := sizedChoice(title, detail, imgui.Vec2{X: width, Y: gui.Scaled(modeChoiceHeight)})
+
+	if on {
+		imgui.PopStyleColorV(3)
+	}
+
+	return clicked
+}
+
+// sizedChoice is a choice of a size of its own.
+func sizedChoice(title, detail string, size imgui.Vec2) bool {
 	imgui.PushIDStr(title)
 	defer imgui.PopID()
 
 	origin := imgui.CursorScreenPos()
-	size := imgui.Vec2{X: width, Y: gui.Scaled(choiceHeight)}
+	width := size.X
 
 	clicked := imgui.ButtonV("##choice", size)
 
@@ -507,6 +567,9 @@ func (a *App) pickerPreview() {
 	}
 
 	label := gui.Iconed(gui.IconForward, "Start Creating")
+	if a.state.mode == modeModifiers {
+		label = gui.Iconed(gui.IconForward, "Wear Portrait Modifiers")
+	}
 	imgui.SetCursorPosX(imgui.CursorPosX() + max(imgui.ContentRegionAvail().X-imgui.CalcTextSize(label).X-imgui.CurrentStyle().FramePadding().X*2, 0))
 
 	imgui.BeginDisabledV(state.picked == "")

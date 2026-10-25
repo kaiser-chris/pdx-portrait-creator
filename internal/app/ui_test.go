@@ -965,14 +965,20 @@ func TestLooksDressThePortrait(t *testing.T) {
 
 	bare := portrait.viewer.Image()
 
+	// Dressing is a later step of making a character, and off to begin with.
+	if portrait.character.looks.on || len(portrait.bodyParts) > 0 {
+		t.Errorf("before it is turned on, the portrait is dressed in %v", portrait.bodyParts)
+	}
+
 	clothes, ok := portrait.modifiers.Get("clothes")
 	if !ok || clothes.Fallback == "" {
 		t.Fatalf("the game has no clothes with a fallback: %+v", clothes)
 	}
 
 	dress := func(look string) {
+		portrait.character.looks.on = true
 		portrait.character.looks.pick("clothes", look)
-		portrait.character.partsChanged = true
+		portrait.character.redress()
 		waitForRebuild(t, application)
 	}
 

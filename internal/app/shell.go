@@ -16,6 +16,12 @@ import (
 const (
 	panelPreview   = "Portrait"
 	panelCharacter = "Character"
+	panelLooks     = "Portrait Modifiers###looks"
+
+	// The windows of a portrait modifier project; see workspace.go.
+	panelProject = "Portrait Modifiers###project"
+	panelElement = "Element###element"
+	windowWeight = "Weight###weight"
 
 	windowSettings = "Settings"
 	windowProblems = "Problems"
@@ -55,8 +61,42 @@ func (a *App) buildDefaultLayout(dockSpaceID imgui.ID) {
 
 	imgui.InternalDockBuilderDockWindow(panelPreview, center)
 	imgui.InternalDockBuilderDockWindow(panelCharacter, sidebar)
+	imgui.InternalDockBuilderDockWindow(panelLooks, sidebar)
+	imgui.InternalDockBuilderDockWindow(panelElement, sidebar)
 
 	imgui.InternalDockBuilderFinish(dockSpaceID)
+}
+
+// dockFirstTime docks a window the first time it is shown, where the layout,
+// saved before it was there, has no place for it: as a tab beside another
+// window for no direction, or in a split of that window's node to the side a
+// direction says, which ratio of the node takes. A window shown before, or
+// one whose neighbour has never been, is left where it is.
+func (a *App) dockFirstTime(name, beside string, side imgui.Dir, ratio float32) {
+	if _, ok := gui.FindWindow(name); ok {
+		return
+	}
+
+	if settings := imgui.InternalFindWindowSettingsByID(imgui.InternalImHashStr(name)); settings != nil && settings.CData != nil {
+		return
+	}
+
+	neighbour, ok := gui.FindWindow(beside)
+	if !ok || neighbour.DockId() == 0 {
+		return
+	}
+
+	if side == imgui.DirNone {
+		imgui.SetNextWindowDockIDV(neighbour.DockId(), imgui.CondFirstUseEver)
+
+		return
+	}
+
+	var at, rest imgui.ID
+
+	imgui.InternalDockBuilderSplitNode(neighbour.DockId(), side, ratio, &at, &rest)
+	imgui.InternalDockBuilderDockWindow(name, at)
+	imgui.InternalDockBuilderFinish(neighbour.DockId())
 }
 
 func (a *App) menuBar() {
@@ -76,6 +116,14 @@ func (a *App) menuBar() {
 		}
 
 		imgui.Separator()
+
+		if a.state.mode == modeModifiers {
+			if imgui.MenuItemBoolV(gui.Iconed(gui.IconSave, labelSaveModifier), "Ctrl+S", false, a.canSaveModifier()) {
+				a.saveModifier()
+			}
+
+			imgui.Separator()
+		}
 
 		if imgui.MenuItemBoolV(gui.Iconed(gui.IconSave, labelSave), "Ctrl+S", false, a.canSave()) {
 			a.save()
@@ -187,6 +235,10 @@ func (a *App) handleShortcuts() {
 		a.startOver()
 	}
 
+	if io.KeyCtrl() && imgui.IsKeyPressedBool(imgui.KeyS) && a.canSaveModifier() {
+		a.saveModifier()
+	}
+
 	if io.KeyCtrl() && imgui.IsKeyPressedBool(imgui.KeyS) && a.canSave() {
 		if io.KeyShift() {
 			a.saveToFile()
@@ -210,6 +262,8 @@ func (a *App) closeFocusedWindow() {
 		a.state.showSettings = false
 	case windowProblems:
 		a.state.showProblems = false
+	case windowWeight:
+		a.state.workspace.showWeight = false
 	default:
 		a.closeReference(a.state.focusedWindow)
 	}
@@ -272,9 +326,10 @@ func (a *App) canStartOver() bool {
 }
 
 // startOver opens the welcome screen again, to start the portrait from
-// something else.
+// something else, set to the workflow the windows are for.
 func (a *App) startOver() {
 	a.state.welcome = true
+	a.state.welcomeMode = a.state.mode
 }
 
 // problemsWindow lists what went wrong reading the portrait.

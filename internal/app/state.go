@@ -78,6 +78,21 @@ type state struct {
 
 	// showProblems shows the window of what went wrong reading the portrait.
 	showProblems bool
+
+	// mode is the workflow the windows are for, and welcomeMode the one the
+	// welcome screen starts; see workspace.go.
+	mode, welcomeMode workflow
+
+	// characterLooks are the looks of the character being made, kept while
+	// a portrait modifier project dresses the base its own way.
+	characterLooks looks
+
+	// looks is what the Portrait Modifiers window remembers; see looksui.go.
+	looks lookState
+
+	// workspace is what the windows of a portrait modifier project remember;
+	// see workspace.go.
+	workspace workspaceState
 }
 
 func newState(settings *config.Settings) state {

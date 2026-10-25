@@ -50,9 +50,10 @@ type dnaFile struct {
 	original *genes.DNA
 }
 
-// canSave reports whether there is a portrait to save.
+// canSave reports whether there is a portrait's DNA to save: one is being
+// made, rather than worn as the base of a portrait modifier project.
 func (a *App) canSave() bool {
-	return a.editing()
+	return a.editing() && a.state.mode == modeCharacter
 }
 
 // editing reports whether the editor is open on a portrait, past the welcome

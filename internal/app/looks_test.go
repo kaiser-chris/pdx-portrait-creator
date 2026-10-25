@@ -57,18 +57,21 @@ func names(modifiers []*genes.PortraitModifier) []string {
 	return found
 }
 
-// Until a look is picked the portrait is not dressed; once one is, every
-// group the game picks from on its own dresses it in the look picked, its
-// fallback, or the modifier it always applies, in the order of their
-// priorities, and a group set to nothing draws nothing but its fallback.
+// Until dressing is turned on the portrait is not dressed, whatever is
+// picked; once it is, every group the game picks from on its own dresses it
+// in the look picked, its fallback, or the modifier it always applies, in the
+// order of their priorities, and a group set to nothing draws nothing but its
+// fallback.
 func TestLooksDressInThePicked(t *testing.T) {
-	l := looks{groups: lookGroups(t)}
-
-	if l.dressing() || len(l.modifiers()) != 0 {
-		t.Fatalf("undressed looks give %v", names(l.modifiers()))
-	}
+	l := looks{groups: groupList(lookGroups(t))}
 
 	l.pick("headgear", "top_hat")
+
+	if l.dressing() || len(l.modifiers()) != 0 {
+		t.Fatalf("looks not turned on give %v", names(l.modifiers()))
+	}
+
+	l.on = true
 
 	if got := names(l.modifiers()); len(got) != 3 || got[0] != "shrink_body" || got[1] != "default_clothes" || got[2] != "top_hat" {
 		t.Errorf("with a hat = %v, want the body shrunk, the fallback clothes and the hat, by priority", got)
