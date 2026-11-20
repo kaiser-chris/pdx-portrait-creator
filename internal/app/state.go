@@ -112,6 +112,10 @@ type state struct {
 	// dockWaits are how many frames each window shown for the first time has
 	// waited for its neighbour to be docked; see dockFirstTime.
 	dockWaits map[string]int
+
+	// frameRate judges whether the portrait is drawn fast enough; see
+	// slow.go.
+	frameRate frameRate
 }
 
 // selectFrames is how many frames the character panel is brought forward

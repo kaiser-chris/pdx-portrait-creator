@@ -7,6 +7,12 @@ func WarningText(text string) {
 	imgui.TextColored(colorWarning, text)
 }
 
+// WarningColour is the colour of warnings, for a widget other than text to be
+// drawn in.
+func WarningColour() imgui.Vec4 {
+	return colorWarning
+}
+
 // ErrorText is a line of text in the error colour.
 func ErrorText(text string) {
 	imgui.TextColored(colorError, text)

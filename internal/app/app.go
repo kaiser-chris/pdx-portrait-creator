@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/AllenDang/cimgui-go/imgui"
+	rl "github.com/gen2brain/raylib-go/raylib"
 
 	"github.com/kaiser-chris/pdx-portrait-creator/assets"
 	"github.com/kaiser-chris/pdx-portrait-creator/internal/config"
@@ -57,6 +58,10 @@ type App struct {
 	// project is the portrait modifier project, which keeps what it changes
 	// through every base it is worn by; see project.go.
 	project *project
+
+	// graphics is the name of the graphics chip the window draws with,
+	// which the warning of a slow portrait names.
+	graphics string
 
 	// dockWindowClass is handed to the dock space every frame. cimgui-go
 	// dereferences that argument even when it is nil, so one default instance
@@ -146,6 +151,7 @@ func New(options Options) (*App, error) {
 	application.dialogs = systemDialogs{parent: dialogParent()}
 
 	application.dockWindowClass = imgui.NewWindowClass()
+	application.graphics = graphicsName()
 
 	// The 3D view needs the OpenGL context the window just created. Without
 	// it the rest of the application still works, so a view that cannot be
@@ -214,6 +220,11 @@ func (a *App) frame() {
 	a.pollDroppedFiles()
 	a.pollReferences()
 	a.expireError()
+
+	// The rate is judged on the frames of a portrait being drawn, which is
+	// what makes them slow, in a window that is not minimized, which may
+	// draw few.
+	a.state.frameRate.frame(time.Now(), a.portrait != nil && a.portrait.loaded() && !rl.IsWindowMinimized())
 
 	// Checked every frame so that "Automatic" follows the window from one
 	// monitor to another. Nothing happens unless the scale actually changes.

@@ -222,12 +222,41 @@ func (a *App) statusBar() {
 
 			right := fmt.Sprintf("%.0f FPS", imgui.CurrentIO().Framerate())
 
-			// What went wrong reading the portrait is a click away.
+			var problems string
 			if a.portrait != nil && len(a.portrait.diagnostics) > 0 {
-				problems := gui.Iconed(gui.IconWarning, fmt.Sprintf("%d problems", len(a.portrait.diagnostics)))
+				problems = gui.Iconed(gui.IconWarning, fmt.Sprintf("%d problems", len(a.portrait.diagnostics)))
+			}
 
+			slow := a.slowWarning()
+
+			// The buttons stand to the left of the rate, each as wide as its
+			// label and the padding of a button, placed from the right edge
+			// of the bar.
+			spacing := imgui.CurrentStyle().ItemSpacing().X
+			edge := imgui.CursorPosX() + imgui.ContentRegionAvail().X
+			width := func(label string) float32 {
+				if label == "" {
+					return 0
+				}
+
+				return imgui.CalcTextSize(label).X + imgui.CurrentStyle().FramePadding().X*2 + spacing
+			}
+
+			// A portrait drawn too slowly says why when pointed at.
+			if slow != "" {
 				imgui.SameLine()
-				imgui.SetCursorPosX(imgui.ContentRegionAvail().X - imgui.CalcTextSize(right).X - imgui.CalcTextSize(problems).X - imgui.CurrentStyle().ItemSpacing().X*3)
+				imgui.SetCursorPosX(edge - imgui.CalcTextSize(right).X - width(problems) - width(slow) - spacing)
+
+				imgui.PushStyleColorVec4(imgui.ColText, gui.WarningColour())
+				imgui.SmallButton(slow)
+				imgui.PopStyleColor()
+				a.slowTooltip()
+			}
+
+			// What went wrong reading the portrait is a click away.
+			if problems != "" {
+				imgui.SameLine()
+				imgui.SetCursorPosX(edge - imgui.CalcTextSize(right).X - width(problems) - spacing)
 
 				if imgui.SmallButton(problems) {
 					a.state.showProblems = true
@@ -236,7 +265,7 @@ func (a *App) statusBar() {
 
 			// Right align the diagnostics.
 			imgui.SameLine()
-			imgui.SetCursorPosX(imgui.ContentRegionAvail().X - imgui.CalcTextSize(right).X)
+			imgui.SetCursorPosX(edge - imgui.CalcTextSize(right).X)
 			imgui.TextDisabled(right)
 
 			imgui.EndMenuBar()

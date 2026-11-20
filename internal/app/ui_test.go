@@ -1154,3 +1154,24 @@ func TestRangesOfSpecialGenesPick(t *testing.T) {
 		t.Skip("the game's clothes give no special accessory gene of several accessories a whole range")
 	}
 }
+
+// A portrait drawn too slowly is warned of in the status bar, which names the
+// graphics chip the window draws with.
+func TestSlowGraphicsAreWarnedOf(t *testing.T) {
+	application, _ := startApp(t, "")
+	defer application.Close()
+
+	if application.graphics == "" || application.graphics == "an unknown graphics chip" {
+		t.Errorf("the graphics chip is %q, want the driver's name for it", application.graphics)
+	}
+
+	application.state.frameRate.slow, application.state.frameRate.rate = true, 4
+
+	for range 3 {
+		application.Step()
+	}
+
+	if label := application.slowWarning(); !strings.Contains(label, "Slow graphics") {
+		t.Errorf("a slow portrait is warned of as %q", label)
+	}
+}
